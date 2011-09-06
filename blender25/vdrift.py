@@ -20,17 +20,17 @@
 # ***** END GPL LICENCE BLOCK *****
 
 bl_info = {
-    "name": "Export .joe",
-    "description": "Export to Quake2 file format (.md2)",
-    "author": "NaN, based on JOE exporter by Joe Venzon and  MD2 importer by Bob Holcomb",
-    "version": (0, 5),
-    "blender": (2, 5, 8),
-    "api": 31236,
-    "location": "File > Export > joe",
-    "warning": '', # used for warning icon and text in addons panel
-    "wiki_url": "http://", 
-    "tracker_url": "http://",
-    "category": "Import-Export"}
+	"name": "Export .joe",
+	"description": "Export to VDrift JOE file format (.joe)",
+	"author": "NaN, port of VDrift blender24 script",
+	"version": (0, 5),
+	"blender": (2, 5, 8),
+	"api": 31236,
+	"location": "File > Export > joe",
+	"warning": '', # used for warning icon and text in addons panel
+	"wiki_url": "http://", 
+	"tracker_url": "http://",
+	"category": "Import-Export"}
 
 import bpy
 from bpy.props import *
