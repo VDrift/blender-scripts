@@ -193,8 +193,9 @@ class joe_frame(object):
 			self.faces.append(jf)
 		# get texture coordinates
 		if len(mesh.uv_textures) != 0:
-			for jf, mf in zip(self.faces, mesh.uv_textures[0].data):
-				jf.texture_index = [texcoords.get((uv[0], uv[1])) for uv in mf.uv[0:3]]
+			for i, f in enumerate(self.faces):
+				mf = mesh.uv_textures[0].data[i]
+				f.texture_index = [texcoords.get((uv[0], uv[1])) for uv in mf.uv[0:3]]
 		self.normals = [joe_vertex(n[0], n[1], n[2]) for n in normals.list]
 		self.verts = [joe_vertex(v[0], v[1], v[2]) for v in vertices.list]
 		self.texcoords = [joe_texcoord(uv[0], uv[1]) for uv in texcoords.list]
@@ -251,20 +252,21 @@ class joe_frame(object):
 		mesh.faces.add(len(self.faces))
 		
 		# set vertices
-		for mv, v in zip(mesh.vertices, self.verts):
-			mv.co = v
+		for i, v in enumerate(self.verts):
+			mesh.vertices[i].co = v
 		for f in self.faces:
 			for i in range(3):
 				mesh.vertices[f.vertex_index[i]].normal = self.normals[f.normal_index[i]]
 		
 		# set faces
-		for mf, sf in zip(mesh.faces, self.faces):
-			mf.vertices = (sf.vertex_index[0], sf.vertex_index[1], sf.vertex_index[2], 0)
-			mf.use_smooth = True
+		for i, f in enumerate(self.faces):
+			mesh.faces[i].vertices = (f.vertex_index[0], f.vertex_index[1], f.vertex_index[2], 0)
+			mesh.faces[i].use_smooth = True
 		
 		# set texture coordinates
 		mesh.uv_textures.new()
-		for mf, f in zip(mesh.uv_textures[0].data, self.faces):
+		for i, f in enumerate(self.faces):
+			mf = mesh.uv_textures[0].data[i]
 			mf.uv1 = self.texcoords[f.texture_index[0]]
 			mf.uv2 = self.texcoords[f.texture_index[1]]
 			mf.uv3 = self.texcoords[f.texture_index[2]]
