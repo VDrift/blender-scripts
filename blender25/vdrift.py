@@ -1,6 +1,3 @@
-#!BPY
-# -*- coding: iso-8859-1 -*-
-
 # ***** BEGIN GPL LICENSE BLOCK *****
 #
 # This program is free software; you can redistribute it and/or
@@ -20,30 +17,24 @@
 # ***** END GPL LICENCE BLOCK *****
 
 bl_info = {
-	"name": "Export .joe",
-	"description": "Export to VDrift JOE file format (.joe)",
-	"author": "NaN, port of VDrift blender24 script",
-	"version": (0, 5),
+	"name": "VDrfit JOE format",
+	"description": "Import-Export to VDrift JOE files (.joe)",
+	"author": "NaN, port of VDrift blender24 scripts",
+	"version": (0, 6),
 	"blender": (2, 5, 8),
-	"api": 31236,
-	"location": "File > Export > joe",
-	"warning": '', # used for warning icon and text in addons panel
+	"api": 35622,
+	"location": "File > Import-Export",
+	"warning": "",
 	"wiki_url": "http://", 
 	"tracker_url": "http://",
 	"category": "Import-Export"}
 
 import bpy
-from bpy.props import *
-
-from bpy_extras.io_utils import ExportHelper
-from datetime import datetime
-
-import math
-from math import pi
+from bpy.props import StringProperty
+from bpy_extras.io_utils import ExportHelper, ImportHelper
+from bpy_extras.image_utils import load_image
 import mathutils
-
 import struct
-import os
 
 class joe_vertex:
 	__slots__ = 'x', 'y', 'z'
@@ -68,6 +59,23 @@ class joe_vertex:
 		data = struct.pack(self.binary_format, self.x, self.y, self.z)
 		file.write(data)
 
+	# return a list of 3-tuples
+	@staticmethod
+	def read(num, file):
+		values = []
+		for i in range(num):
+			bin_data = file.read(joe_vertex.binary_size)
+			v = struct.unpack(joe_vertex.binary_format, bin_data)
+			values.append((v[0], v[1], v[2]))
+		return values
+	
+	# write a list of 3-tuples
+	@staticmethod
+	def write(values, file):
+		for v in values:
+			bin_data = struct.pack(joe_vertex.binary_format, v[0], v[1], v[2])
+			file.write(bin_data)
+
 class joe_texcoord(object):
 	__slots__ = 'u', 'v'
 	binary_format = "<2f" #little-endian (<), 2 float
@@ -89,6 +97,23 @@ class joe_texcoord(object):
 	def save(self, file):
 		data = struct.pack(self.binary_format, self.u, 1 - self.v)
 		file.write(data)
+		
+	# return a list of 2-tuples
+	@staticmethod
+	def read(num, file):
+		values = []
+		for i in range(num):
+			bin_data = file.read(joe_texcoord.binary_size)
+			v = struct.unpack(joe_texcoord.binary_format, bin_data)
+			values.append((v[0], 1-v[1]))
+		return values
+	
+	# write a list of 2-tuples
+	@staticmethod
+	def write(values, file):
+		for v in values:
+			bin_data = struct.pack(joe_texcoord.binary_format, v[0], 1-v[1])
+			file.write(bin_data)
 
 class joe_face(object):
 	__slots__ = 'vertex_index', 'normal_index', 'texture_index'
@@ -134,12 +159,9 @@ class joe_frame(object):
 		self.num_texcoords = data[1]
 		self.num_normals = data[2]
 		# mesh data
-		for i in range(self.num_vertices):
-			self.verts.append(joe_vertex().load(file))
-		for i in range(self.num_normals):
-			self.normals.append(joe_vertex().load(file))
-		for i in range(self.num_texcoords):
-			self.texcoords.append(joe_texcoord().load(file))
+		self.verts = joe_vertex.read(self.num_vertices, file)
+		self.normals = joe_vertex.read(self.num_normals, file)
+		self.texcoords = joe_texcoord.read(self.num_texcoords, file)
 		return self
 	
 	def save(self, file):
@@ -160,7 +182,7 @@ class joe_frame(object):
 		normals = util.indexed_set()
 		vertices = util.indexed_set()
 		texcoords = util.indexed_set()
-		# vertices and normals
+		# get vertices and normals
 		for f in mesh.faces:
 			jf = joe_face()
 			jf.vertex_index = [vertices.get(mesh.vertices[vi].co) for vi in f.vertices]
@@ -169,7 +191,7 @@ class joe_frame(object):
 			else:
 				jf.normal_index = [normals.get(f.normal)] * 3
 			self.faces.append(jf)
-		# texture coordinates
+		# get texture coordinates
 		if len(mesh.uv_textures) != 0:
 			for jf, mf in zip(self.faces, mesh.uv_textures[0].data):
 				jf.texture_index = [texcoords.get((uv[0], uv[1])) for uv in mf.uv[0:3]]
@@ -181,8 +203,17 @@ class joe_frame(object):
 		self.num_vertices = len(self.verts)
 		return self
 
+	# remove faces consisting less then 3 vertices
+	def remove_degenerate_faces(self):
+		faces = []
+		for f in self.faces:
+			vi = f.vertex_index
+			if vi[0] != vi[1] and vi[1] != vi[2] and vi[0] != vi[2]:
+				faces.append(f)
+		self.faces = faces
+
+	# blender only supports one normal per vertex
 	def duplicate_verts_with_multiple_normals(self):
-		#print len(self.verts)
 		face_vert = {}
 		verts = []
 		for f in self.faces:
@@ -196,51 +227,54 @@ class joe_frame(object):
 				else:
 					f.vertex_index[i] = face_vert[vn]
 		self.verts = verts
-		#print len(self.verts)
 	
-	def remove_degenerate_faces(self):
-		#print len(self.faces)
-		faces = []
+	# in blender 2.5 the last vertex index shall not be 0 
+	def swizzle_face_vertices(self):
 		for f in self.faces:
 			vi = f.vertex_index
-			if vi[0] != vi[1] and vi[1] != vi[2] and vi[0] != vi[2]:
-				faces.append(f)
-		self.faces = faces
-		#print len(self.faces)
+			ni = f.normal_index
+			ti = f.texture_index
+			if vi[2] == 0:
+				vi[0], vi[1], vi[2] = vi[2], vi[0], vi[1]
+				ni[0], ni[1], ni[2] = ni[2], ni[0], ni[1]
+				ti[0], ti[1], ti[2] = ti[2], ti[0], ti[1]
 	
 	def to_mesh(self, name, image):
+		# cleanup joe
 		self.remove_degenerate_faces()
+		self.swizzle_face_vertices()
 		self.duplicate_verts_with_multiple_normals()
-		mesh = Blender.Mesh.New()
-		mesh.properties['joename'] = name
-		mesh.verts.extend([Vector(v.co()) for v in self.verts])
-		# set normals
+		
+		# new mesh
+		mesh = bpy.data.meshes.new(name)
+		mesh.vertices.add(len(self.verts))
+		mesh.faces.add(len(self.faces))
+		
+		# set vertices
+		for mv, v in zip(mesh.vertices, self.verts):
+			mv.co = v
 		for f in self.faces:
 			for i in range(3):
-				mesh.verts[f.vertex_index[i]].no = Vector(self.normals[f.normal_index[i]].co())
+				mesh.vertices[f.vertex_index[i]].normal = self.normals[f.normal_index[i]]
+		
 		# set faces
-		mesh.faces.extend([f.vertex_index for f in self.faces], ignoreDups=True)
+		for mf, sf in zip(mesh.faces, self.faces):
+			mf.vertices = (sf.vertex_index[0], sf.vertex_index[1], sf.vertex_index[2], 0)
+			mf.use_smooth = True
+		
 		# set texture coordinates
-		for i in range(len(mesh.faces)):
-			sf = self.faces[i]
-			mf = mesh.faces[i]
-			# fix face indices ordering
-			i = (0, 1, 2)
-			if mf.v[0].index == sf.vertex_index[1]:	i = (1, 2, 0)
-			elif mf.v[0].index == sf.vertex_index[2]: i = (2, 0, 1)
-			# set coordinates
-			ti = sf.texture_index[i[0]], sf.texture_index[i[1]], sf.texture_index[i[2]]
-			uv = [Vector(self.texcoords[ti[0]].uv()), Vector(self.texcoords[ti[1]].uv()), Vector(self.texcoords[ti[2]].uv())]
-			mf.uv = uv
-			mf.smooth = 1
-			if image != None:
+		mesh.uv_textures.new()
+		for mf, f in zip(mesh.uv_textures[0].data, self.faces):
+			mf.uv1 = self.texcoords[f.texture_index[0]]
+			mf.uv2 = self.texcoords[f.texture_index[1]]
+			mf.uv3 = self.texcoords[f.texture_index[2]]
+			if (image):
 				mf.image = image
-		# add to scene
-		scn = Blender.Scene.GetCurrent()
-		if name:
-			return scn.objects.new(mesh, name)
-		else:
-			return scn.objects.new(mesh)
+				mf.use_image = True
+		
+		mesh.validate()
+		mesh.update()
+		return bpy.data.objects.new(name, mesh)
 
 class joe_obj(object):
 	__slots__ = 'ident', 'version', 'num_faces', 'num_frames', 'frames'
@@ -579,7 +613,8 @@ class util:
 			self.map = {}
 			self.list = []
 		def get(self, ob):
-			fixed = tuple(round(n, 5) for n in ob) # using float as key in dict
+			# using float as key in dict
+			fixed = tuple(round(n, 5) for n in ob)
 			if not fixed in self.map:
 				ni = len(self.list)
 				self.map[fixed] = ni
@@ -647,27 +682,15 @@ class util:
 			mesh = util.convert_to_tris(object)
 			util.delete_object(object)
 		return mesh
-'''
-	@staticmethod
-	def load_image(filename):
-		if Blender.sys.exists(filename):
-			try:
-				return Blender.Image.Load(filename)
-			except:	
-				print 'JOE Import, Could not load image: ',  filename
-		return None
-'''
 
 class export_joe(bpy.types.Operator, ExportHelper):
-	bl_idname = "untitled.joe"
+	bl_idname = "export.joe"
 	bl_label = "Export JOE"
-	
-	filename = StringProperty(name="File Path",
-		description="Script processing path.",
-		maxlen= 1024,
-		default= "")
 	filename_ext = ".joe"
-
+	filter_glob = StringProperty(
+			default="*.joe",
+			options={'HIDDEN'})
+	
 	def __init__(self):
 		try:
 			self.object = bpy.context.selected_objects[0]
@@ -699,22 +722,48 @@ class export_joe(bpy.types.Operator, ExportHelper):
 			self.report({'INFO'},  object.name + " exported")
 		
 		return {'FINISHED'}
-	
+		
 	def invoke(self, context, event):
-		wm = context.window_manager
-		wm.fileselect_add(self)
+		context.window_manager.fileselect_add(self);
 		return {'RUNNING_MODAL'}
 
-def menu_cb(self, context):
+class import_joe(bpy.types.Operator, ImportHelper):
+	bl_idname = "import.joe"
+	bl_label = "Import JOE"
+	filename_ext = ".joe"
+	filter_glob = StringProperty(
+		default="*.joe",
+		options={'HIDDEN'})
+	
+	def execute(self, context):
+		props = self.properties
+		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
+		try:
+			image = None #load_image(filepath_img)
+			file = open(filepath, "rb")
+			joe = joe_obj().load(file)
+			file.close()
+			object = joe.to_mesh(bpy.path.basename(filepath), image)
+			context.scene.objects.link(object)
+		finally:
+			self.report({'INFO'},  filepath + " imported")
+		return {'FINISHED'}
+
+def menu_export_joe(self, context):
 	self.layout.operator(export_joe.bl_idname, text = "VDrift JOE (.joe)")
+	
+def menu_import_joe(self, context):
+	self.layout.operator(import_joe.bl_idname, text = "VDrift JOE (.joe)")
  
 def register():
 	bpy.utils.register_module(__name__)
-	bpy.types.INFO_MT_file_export.append(menu_cb)
+	bpy.types.INFO_MT_file_export.append(menu_export_joe)
+	bpy.types.INFO_MT_file_import.append(menu_import_joe)
  
 def unregister():
 	bpy.utils.unregister_module(__name__)
-	bpy.types.INFO_MT_file_export.remove(menu_cb)
+	bpy.types.INFO_MT_file_export.remove(menu_export_joe)
+	bpy.types.INFO_MT_file_import.remove(menu_import_joe)
  
 if __name__ == "__main__":
 	register()
