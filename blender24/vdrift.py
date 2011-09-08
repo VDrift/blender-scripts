@@ -14,18 +14,9 @@ from Blender.Mathutils import Vector
 from Blender import Group
 import struct
 
-JOE_MAX_TRIANGLES = 4096
-JOE_MAX_VERTICES = 2048
-JOE_MAX_TEXCOORDS = 2048
-JOE_MAX_NORMALS = 2048
-JOE_MAX_FRAMES = 512
-JOE_VERSION = 3
-#JOE_MAX_FRAMESIZE=(JOE_MAX_VERTICES * 24 + 128)
-
 class joe_vertex:
 	__slots__ = 'x', 'y', 'z'
-	binary_format = "<fff"
-	binary_size = struct.calcsize(binary_format)
+	bstruct = struct.Struct("<fff")
 	
 	def __init__(self, x = 0.0, y = 0.0, z = 0.0):
 		self.x, self.y, self.z = x, y, z
@@ -34,21 +25,20 @@ class joe_vertex:
 		return self.x, self.y, self.z
 	
 	def load(self, file):
-		temp_data = file.read(self.binary_size)
-		data = struct.unpack(self.binary_format, temp_data)
+		temp_data = file.read(self.bstruct.size)
+		data = self.bstruct.unpack(temp_data)
 		self.x = data[0]
 		self.y = data[1]
 		self.z = data[2]
 		return self
 	
 	def save(self, file):
-		data = struct.pack(self.binary_format, self.x, self.y, self.z)
+		data = self.bstruct.pack(self.x, self.y, self.z)
 		file.write(data)
 
 class joe_texcoord(object):
 	__slots__ = 'u', 'v'
-	binary_format = "<2f" #little-endian (<), 2 float
-	binary_size = struct.calcsize(binary_format)
+	bstruct = struct.Struct("<ff")
 	
 	def __init__(self, u = 0.0, v = 0.0):
 		self.u, self.v = u, v
@@ -57,42 +47,40 @@ class joe_texcoord(object):
 		return self.u, self.v
 	
 	def load (self, file):
-		temp_data = file.read(self.binary_size)
-		data = struct.unpack(self.binary_format, temp_data)
+		temp_data = file.read(self.bstruct.size)
+		data = self.bstruct.unpack(temp_data)
 		self.u = data[0]
 		self.v = 1.0 - data[1]
 		return self
 	
 	def save(self, file):
-		data = struct.pack(self.binary_format, self.u, 1 - self.v)
+		data = self.bstruct.pack(self.u, 1 - self.v)
 		file.write(data)
 
 class joe_face(object):
 	__slots__ = 'vertex_index', 'normal_index', 'texture_index'
-	binary_format = "<3h3h3h" #little-endian (<), 3 short, 3 short
-	binary_size = struct.calcsize(binary_format)
-   
+	bstruct = struct.Struct("<3h3h3h")
+	
 	def __init__(self):
 		self.vertex_index = [0, 0, 0]
 		self.normal_index = [0, 0, 0]
 		self.texture_index = [0, 0, 0]
 	
 	def load (self, file):
-		temp_data = file.read(self.binary_size)
-		data = struct.unpack(self.binary_format, temp_data)
+		temp_data = file.read(self.bstruct.size)
+		data = self.bstruct.unpack(temp_data)
 		self.vertex_index = [data[0], data[1], data[2]]
 		self.normal_index = [data[3], data[4], data[5]]
 		self.texture_index = [data[6], data[7], data[8]]
 		return self
 	
 	def save(self, file):
-		data = struct.pack(self.binary_format, self.vertex_index[0],self.vertex_index[1],self.vertex_index[2],self.normal_index[0],self.normal_index[1],self.normal_index[2],self.texture_index[0],self.texture_index[1],self.texture_index[2])
+		data = self.bstruct.pack(self.vertex_index[0],self.vertex_index[1],self.vertex_index[2],self.normal_index[0],self.normal_index[1],self.normal_index[2],self.texture_index[0],self.texture_index[1],self.texture_index[2])
 		file.write(data)
 
 class joe_frame(object):
 	__slots__ = 'num_vertices', 'num_normals', 'num_texcoords', 'faces', 'verts', 'texcoords', 'normals'
-	binary_format = "<3i"
-	binary_size = struct.calcsize(binary_format)
+	bstruct = struct.Struct("<3i")
 
 	def __init__(self):
 		self.num_vertices = 0
@@ -105,8 +93,8 @@ class joe_frame(object):
 
 	def load(self, file):
 		# header
-		temp_data = file.read(self.binary_size)
-		data = struct.unpack(self.binary_format, temp_data)
+		temp_data = file.read(self.bstruct.size)
+		data = self.bstruct.unpack(temp_data)
 		self.num_vertices = data[0]
 		self.num_texcoords = data[1]
 		self.num_normals = data[2]
@@ -121,7 +109,7 @@ class joe_frame(object):
 	
 	def save(self, file):
 		# header
-		data = struct.pack(self.binary_format, self.num_vertices, self.num_texcoords, self.num_normals)
+		data = self.bstruct.pack(self.num_vertices, self.num_texcoords, self.num_normals)
 		file.write(data)
 		# mesh data
 		for i in range(self.num_vertices):
@@ -163,7 +151,7 @@ class joe_frame(object):
 		return self
 
 	def duplicate_verts_with_multiple_normals(self):
-		#print len(self.verts)
+		#print "multiple normals pass verts: " + str(len(self.verts))
 		face_vert = {}
 		verts = []
 		for f in self.faces:
@@ -177,17 +165,19 @@ class joe_frame(object):
 				else:
 					f.vertex_index[i] = face_vert[vn]
 		self.verts = verts
-		#print len(self.verts)
+		#print "multiple normals pass verts: " + str(len(self.verts))
 	
 	def remove_degenerate_faces(self):
-		#print len(self.faces)
+		#print "degenerate faces pass: " + str(len(self.faces))
 		faces = []
 		for f in self.faces:
 			vi = f.vertex_index
 			if vi[0] != vi[1] and vi[1] != vi[2] and vi[0] != vi[2]:
 				faces.append(f)
+			else:
+				print "degenerate face: " + str(vi)
 		self.faces = faces
-		#print len(self.faces)
+		#print "degenerate faces pass: " + str(len(self.faces))
 	
 	def to_mesh(self, name, image):
 		self.remove_degenerate_faces()
@@ -225,20 +215,19 @@ class joe_frame(object):
 
 class joe_obj(object):
 	__slots__ = 'ident', 'version', 'num_faces', 'num_frames', 'frames'
-	binary_format = "<4i"  #little-endian (<), 4 integers (4i)
-	binary_size = struct.calcsize(binary_format)
+	bstruct = struct.Struct("<4i")
    
 	def __init__(self):
 		self.ident = 844121161
-		self.version = JOE_VERSION
+		self.version = 3
 		self.num_faces = 0
 		self.num_frames = 0
 		self.frames = []
    
 	def load(self, file):
 		# header
-		temp_data = file.read(self.binary_size)
-		data = struct.unpack(self.binary_format, temp_data)
+		temp_data = file.read(self.bstruct.size)
+		data = self.bstruct.unpack(temp_data)
 		self.ident = data[0]
 		self.version = data[1]
 		self.num_faces = data[2]
@@ -253,7 +242,7 @@ class joe_obj(object):
 	
 	def save(self, file):
 		# header
-		data = struct.pack(self.binary_format, self.ident, self.version, self.num_faces, self.num_frames)
+		data = self.bstruct.pack(self.ident, self.version, self.num_faces, self.num_frames)
 		file.write(data)
 		# frames
 		for i in range(self.num_frames):
@@ -280,8 +269,7 @@ class joe_obj(object):
 
 class joe_pack(object):
 	versionstr = 'JPK01.00'
-	binary_format = "<2i"  #little-endian (<), 2 integers (2i)
-	binary_size = struct.calcsize(binary_format)
+	bstruct = struct.Struct("<2i")
 
 	def __init__(self):
 		self.numobjs = 0
@@ -348,15 +336,15 @@ class joe_pack(object):
 		file = open(filename, 'rb')
 		# header
 		version = file.read(len(self.versionstr))
-		temp = file.read(self.binary_size)
-		data = struct.unpack(self.binary_format, temp)
+		temp_data = file.read(self.bstruct.size)
+		data = self.bstruct.unpack(temp_data)
 		self.numobjs = data[0]
 		self.maxstrlen = data[1]
 		# fat
 		fat = []
 		for i in range(self.numobjs):
-			temp = file.read(self.binary_size)
-			data = struct.unpack(self.binary_format, temp)
+			temp_data = file.read(self.bstruct.size)
+			data = self.bstruct.unpack(temp_data)
 			offset = data[0]
 			length = data[1]
 			name = file.read(self.maxstrlen)
@@ -380,12 +368,12 @@ class joe_pack(object):
 		file = open(filename, 'rb+')
 		# header
 		file.write(self.versionstr)
-		data = struct.pack(self.binary_format, self.numobjs, self.maxstrlen)
+		data = self.bstruct.pack(self.numobjs, self.maxstrlen)
 		file.write(data)
 		# allocate fat
 		fat_offset = file.tell()
 		for i in range(self.numobjs):
-			data = struct.pack(self.binary_format, 0, 0)
+			data = self.bstruct.pack(0, 0)
 			file.write(data)
 			name = fillz('', self.maxstrlen)
 			file.write(name)
@@ -399,7 +387,7 @@ class joe_pack(object):
 		# fill fat
 		file.seek(fat_offset)
 		for offset, length, name in fat:
-			data = struct.pack(self.binary_format, offset, length)
+			data = self.bstruct.pack(offset, length)
 			file.write(data)
 			name = fillz(name, self.maxstrlen)
 			file.write(name)
@@ -583,8 +571,8 @@ class indexed_set(object):
 		self.map = {}
 		self.list = []
 	def get(self, ob):
-		fixed = tuple(round(n, 5) for n in ob) # using float as key in dict
-		#print fixed
+		# using float as key in dict
+		fixed = tuple(round(n, 5) for n in ob) 
 		if not fixed in self.map:
 			ni = len(self.list)
 			self.map[fixed] = ni
