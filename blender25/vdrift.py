@@ -17,7 +17,7 @@
 # ***** END GPL LICENCE BLOCK *****
 
 bl_info = {
-	"name": "VDrfit JOE format",
+	"name": "VDrift JOE format",
 	"description": "Import-Export to VDrift JOE files (.joe)",
 	"author": "NaN, port of VDrift blender24 scripts",
 	"version": (0, 6),
