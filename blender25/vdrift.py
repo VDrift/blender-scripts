@@ -17,108 +17,67 @@
 # ***** END GPL LICENCE BLOCK *****
 
 bl_info = {
-	"name": "VDrfit JOE format",
-	"description": "Import-Export to VDrift JOE files (.joe)",
-	"author": "NaN, port of VDrift blender24 scripts",
-	"version": (0, 6),
-	"blender": (2, 5, 8),
-	"api": 35622,
-	"location": "File > Import-Export",
-	"warning": "",
-	"wiki_url": "http://", 
-	"tracker_url": "http://",
-	"category": "Import-Export"}
+	'name': 'VDrfit JOE format',
+	'description': 'Import-Export to VDrift JOE files (.joe)',
+	'author': 'NaN, port of VDrift blender24 scripts',
+	'version': (0, 6),
+	'blender': (2, 5, 8),
+	'api': 35622,
+	'location': 'File > Import-Export',
+	'warning': '',
+	'wiki_url': 'http://', 
+	'tracker_url': 'http://',
+	'category': 'Import-Export'}
 
 import bpy
 from bpy.props import StringProperty
 from bpy_extras.io_utils import ExportHelper, ImportHelper
 from bpy_extras.image_utils import load_image
-import mathutils
-import struct
+from struct import Struct
 
 class joe_vertex:
-	__slots__ = 'x', 'y', 'z'
-	binary_format = "<fff"
-	binary_size = struct.calcsize(binary_format)
+	bstruct = Struct('<fff')
 	
-	def __init__(self, x = 0.0, y = 0.0, z = 0.0):
-		self.x, self.y, self.z = x, y, z
-	
-	def co(self):
-		return self.x, self.y, self.z
-	
-	def load(self, file):
-		temp_data = file.read(self.binary_size)
-		data = struct.unpack(self.binary_format, temp_data)
-		self.x = data[0]
-		self.y = data[1]
-		self.z = data[2]
-		return self
-	
-	def save(self, file):
-		data = struct.pack(self.binary_format, self.x, self.y, self.z)
-		file.write(data)
-
-	# return a list of 3-tuples
+	# read list of 3-tuples
 	@staticmethod
 	def read(num, file):
 		values = []
 		for i in range(num):
-			bin_data = file.read(joe_vertex.binary_size)
-			v = struct.unpack(joe_vertex.binary_format, bin_data)
-			values.append((v[0], v[1], v[2]))
+			data = file.read(joe_vertex.bstruct.size)
+			v = joe_vertex.bstruct.unpack(data)
+			values.append(v)
 		return values
 	
 	# write a list of 3-tuples
 	@staticmethod
 	def write(values, file):
 		for v in values:
-			bin_data = struct.pack(joe_vertex.binary_format, v[0], v[1], v[2])
-			file.write(bin_data)
+			data = joe_vertex.bstruct.pack(v[0], v[1], v[2])
+			file.write(data)
 
-class joe_texcoord(object):
-	__slots__ = 'u', 'v'
-	binary_format = "<2f" #little-endian (<), 2 float
-	binary_size = struct.calcsize(binary_format)
+class joe_texcoord:
+	bstruct = Struct('<ff')
 	
-	def __init__(self, u = 0.0, v = 0.0):
-		self.u, self.v = u, v
-	
-	def uv(self):
-		return self.u, self.v
-	
-	def load (self, file):
-		temp_data = file.read(self.binary_size)
-		data = struct.unpack(self.binary_format, temp_data)
-		self.u = data[0]
-		self.v = 1.0 - data[1]
-		return self
-	
-	def save(self, file):
-		data = struct.pack(self.binary_format, self.u, 1 - self.v)
-		file.write(data)
-		
-	# return a list of 2-tuples
+	# read a list of 2-tuples
 	@staticmethod
 	def read(num, file):
 		values = []
 		for i in range(num):
-			bin_data = file.read(joe_texcoord.binary_size)
-			v = struct.unpack(joe_texcoord.binary_format, bin_data)
-			values.append((v[0], 1-v[1]))
+			data = file.read(joe_texcoord.bstruct.size)
+			v = joe_texcoord.bstruct.unpack(data)
+			values.append((v[0], 1 - v[1]))
 		return values
 	
 	# write a list of 2-tuples
 	@staticmethod
 	def write(values, file):
 		for v in values:
-			bin_data = struct.pack(joe_texcoord.binary_format, v[0], 1-v[1])
-			file.write(bin_data)
+			data = joe_texcoord.bstruct.pack(v[0], 1 - v[1])
+			file.write(data)
 
-class joe_face(object):
+class joe_face:
 	__slots__ = 'vertex_index', 'normal_index', 'texture_index'
-	binary_format = "<3h3h3h" #little-endian (<), 3 short, 3 short
-	binary_size = struct.calcsize(binary_format)
+	bstruct = Struct('<3h3h3h')
    
 	def __init__(self):
 		self.vertex_index = [0, 0, 0]
@@ -126,21 +85,23 @@ class joe_face(object):
 		self.texture_index = [0, 0, 0]
 	
 	def load (self, file):
-		temp_data = file.read(self.binary_size)
-		data = struct.unpack(self.binary_format, temp_data)
-		self.vertex_index = [data[0], data[1], data[2]]
-		self.normal_index = [data[3], data[4], data[5]]
-		self.texture_index = [data[6], data[7], data[8]]
+		data = file.read(joe_face.bstruct.size)
+		v = joe_face.bstruct.unpack(data)
+		self.vertex_index = [v[0], v[1], v[2]]
+		self.normal_index = [v[3], v[4], v[5]]
+		self.texture_index = [v[6], v[7], v[8]]
 		return self
 	
 	def save(self, file):
-		data = struct.pack(self.binary_format, self.vertex_index[0],self.vertex_index[1],self.vertex_index[2],self.normal_index[0],self.normal_index[1],self.normal_index[2],self.texture_index[0],self.texture_index[1],self.texture_index[2])
+		data = joe_face.bstruct.pack(self.vertex_index[0],self.vertex_index[1],self.vertex_index[2],
+			self.normal_index[0],self.normal_index[1],self.normal_index[2],
+			self.texture_index[0],self.texture_index[1],self.texture_index[2])
 		file.write(data)
 
-class joe_frame(object):
-	__slots__ = 'num_vertices', 'num_normals', 'num_texcoords', 'faces', 'verts', 'texcoords', 'normals'
-	binary_format = "<3i"
-	binary_size = struct.calcsize(binary_format)
+class joe_frame:
+	__slots__ = 'num_vertices', 'num_normals', 'num_texcoords',\
+				'faces', 'verts', 'texcoords', 'normals'
+	bstruct = Struct("<3i")
 
 	def __init__(self):
 		self.num_vertices = 0
@@ -153,11 +114,11 @@ class joe_frame(object):
 
 	def load(self, file):
 		# header
-		temp_data = file.read(self.binary_size)
-		data = struct.unpack(self.binary_format, temp_data)
-		self.num_vertices = data[0]
-		self.num_texcoords = data[1]
-		self.num_normals = data[2]
+		data = file.read(joe_frame.bstruct.size)
+		v = joe_frame.bstruct.unpack(data)
+		self.num_vertices = v[0]
+		self.num_texcoords = v[1]
+		self.num_normals = v[2]
 		# mesh data
 		self.verts = joe_vertex.read(self.num_vertices, file)
 		self.normals = joe_vertex.read(self.num_normals, file)
@@ -166,15 +127,12 @@ class joe_frame(object):
 	
 	def save(self, file):
 		# header
-		data = struct.pack(self.binary_format, self.num_vertices, self.num_texcoords, self.num_normals)
+		data = joe_frame.bstruct.pack(self.num_vertices, self.num_texcoords, self.num_normals)
 		file.write(data)
 		# mesh data
-		for i in range(self.num_vertices):
-			self.verts[i].save(file)
-		for i in range(self.num_normals):
-			self.normals[i].save(file)
-		for i in range(self.num_texcoords):
-			self.texcoords[i].save(file)
+		joe_vertex.write(self.verts, file)
+		joe_vertex.write(self.normals, file)
+		joe_texcoord.write(self.texcoords, file)
 	
 	def from_mesh(self, obj):
 		mesh = util.get_tri_mesh(obj)
@@ -196,9 +154,9 @@ class joe_frame(object):
 			for i, f in enumerate(self.faces):
 				mf = mesh.uv_textures[0].data[i]
 				f.texture_index = [texcoords.get((uv[0], uv[1])) for uv in mf.uv[0:3]]
-		self.normals = [joe_vertex(n[0], n[1], n[2]) for n in normals.list]
-		self.verts = [joe_vertex(v[0], v[1], v[2]) for v in vertices.list]
-		self.texcoords = [joe_texcoord(uv[0], uv[1]) for uv in texcoords.list]
+		self.normals = normals.list
+		self.verts = vertices.list
+		self.texcoords = texcoords.list
 		self.num_normals = len(self.normals)
 		self.num_texcoords = len(self.texcoords)
 		self.num_vertices = len(self.verts)
@@ -278,11 +236,10 @@ class joe_frame(object):
 		mesh.update()
 		return bpy.data.objects.new(name, mesh)
 
-class joe_obj(object):
+class joe_obj:
 	__slots__ = 'ident', 'version', 'num_faces', 'num_frames', 'frames'
-	binary_format = "<4i"  #little-endian (<), 4 integers (4i)
-	binary_size = struct.calcsize(binary_format)
-   
+	bstruct = Struct("<4i")
+	
 	def __init__(self):
 		self.ident = 844121161
 		self.version = 3
@@ -292,12 +249,12 @@ class joe_obj(object):
    
 	def load(self, file):
 		# header
-		temp_data = file.read(self.binary_size)
-		data = struct.unpack(self.binary_format, temp_data)
-		self.ident = data[0]
-		self.version = data[1]
-		self.num_faces = data[2]
-		self.num_frames = data[3]
+		data = file.read(joe_obj.bstruct.size)
+		v = joe_obj.bstruct.unpack(data)
+		self.ident = v[0]
+		self.version = v[1]
+		self.num_faces = v[2]
+		self.num_frames = v[3]
 		# frames
 		for i in range(self.num_frames):
 			self.frames.append(joe_frame())
@@ -308,7 +265,7 @@ class joe_obj(object):
 	
 	def save(self, file):
 		# header
-		data = struct.pack(self.binary_format, self.ident, self.version, self.num_faces, self.num_frames)
+		data = joe_obj.bstruct.pack(self.ident, self.version, self.num_faces, self.num_frames)
 		file.write(data)
 		# frames
 		for i in range(self.num_frames):
@@ -333,9 +290,9 @@ class joe_obj(object):
 		self.num_faces = len(self.frames[0].faces)
 		return self
 '''
-class joe_pack(object):
+class joe_pack:
 	versionstr = 'JPK01.00'
-	binary_format = "<2i"  #little-endian (<), 2 integers (2i)
+	binary_format = '<2i'  #little-endian (<), 2 integers (2i)
 	binary_size = struct.calcsize(binary_format)
 
 	def __init__(self):
@@ -665,10 +622,10 @@ class util:
 	def convert_to_tris(object):
 		mesh = object.data
 		bpy.context.scene.objects.active = object
-		bpy.ops.object.mode_set(mode = "EDIT", toggle = False)
-		bpy.ops.mesh.select_all(action = "SELECT")
+		bpy.ops.object.mode_set(mode = 'EDIT', toggle = False)
+		bpy.ops.mesh.select_all(action = 'SELECT')
 		bpy.ops.mesh.quads_convert_to_tris()
-		bpy.ops.object.mode_set(mode = "OBJECT", toggle = False)
+		bpy.ops.object.mode_set(mode = 'OBJECT', toggle = False)
 		return mesh
 
 	@staticmethod
@@ -686,11 +643,11 @@ class util:
 		return mesh
 
 class export_joe(bpy.types.Operator, ExportHelper):
-	bl_idname = "export.joe"
-	bl_label = "Export JOE"
-	filename_ext = ".joe"
+	bl_idname = 'export.joe'
+	bl_label = 'Export JOE'
+	filename_ext = '.joe'
 	filter_glob = StringProperty(
-			default="*.joe",
+			default='*.joe',
 			options={'HIDDEN'})
 	
 	def __init__(self):
@@ -698,7 +655,7 @@ class export_joe(bpy.types.Operator, ExportHelper):
 			self.object = bpy.context.selected_objects[0]
 		except:
 			self.object = None
-		#bpy.ops.object.mode_set(mode="OBJECT", toggle = False)
+		#bpy.ops.object.mode_set(mode='OBJECT', toggle = False)
 	
 	def execute(self, context):
 		props = self.properties
@@ -716,12 +673,12 @@ class export_joe(bpy.types.Operator, ExportHelper):
 			raise NameError('Selected object must be a mesh!')
 			
 		try:
-			file = open(filepath, "wb")
+			file = open(filepath, 'wb')
 			joe = joe_obj().from_mesh(object)
 			joe.save(file)
 			file.close()
 		finally:
-			self.report({'INFO'},  object.name + " exported")
+			self.report({'INFO'},  object.name + ' exported')
 		
 		return {'FINISHED'}
 		
@@ -730,11 +687,11 @@ class export_joe(bpy.types.Operator, ExportHelper):
 		return {'RUNNING_MODAL'}
 
 class import_joe(bpy.types.Operator, ImportHelper):
-	bl_idname = "import.joe"
-	bl_label = "Import JOE"
-	filename_ext = ".joe"
+	bl_idname = 'import.joe'
+	bl_label = 'Import JOE'
+	filename_ext = '.joe'
 	filter_glob = StringProperty(
-		default="*.joe",
+		default='*.joe',
 		options={'HIDDEN'})
 	
 	def execute(self, context):
@@ -742,20 +699,20 @@ class import_joe(bpy.types.Operator, ImportHelper):
 		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
 		try:
 			image = None #load_image(filepath_img)
-			file = open(filepath, "rb")
+			file = open(filepath, 'rb')
 			joe = joe_obj().load(file)
 			file.close()
 			object = joe.to_mesh(bpy.path.basename(filepath), image)
 			context.scene.objects.link(object)
 		finally:
-			self.report({'INFO'},  filepath + " imported")
+			self.report({'INFO'},  filepath + ' imported')
 		return {'FINISHED'}
 
 def menu_export_joe(self, context):
-	self.layout.operator(export_joe.bl_idname, text = "VDrift JOE (.joe)")
+	self.layout.operator(export_joe.bl_idname, text = 'VDrift JOE (.joe)')
 	
 def menu_import_joe(self, context):
-	self.layout.operator(import_joe.bl_idname, text = "VDrift JOE (.joe)")
+	self.layout.operator(import_joe.bl_idname, text = 'VDrift JOE (.joe)')
  
 def register():
 	bpy.utils.register_module(__name__)
@@ -767,5 +724,5 @@ def unregister():
 	bpy.types.INFO_MT_file_export.remove(menu_export_joe)
 	bpy.types.INFO_MT_file_import.remove(menu_import_joe)
  
-if __name__ == "__main__":
+if __name__ == '__main__':
 	register()
