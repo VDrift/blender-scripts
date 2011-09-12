@@ -18,7 +18,7 @@
 
 bl_info = {
 	'name': 'VDrift JOE/JPK format',
-	'description': 'Import-Export to VDrift JOE files (.joe)',
+	'description': 'Import-Export to VDrift JOE and JPK files (.joe, .jpk)',
 	'author': 'NaN, port of VDrift blender24 scripts',
 	'version': (0, 7),
 	'blender': (2, 5, 8),
@@ -339,21 +339,21 @@ class joe_pack:
 		print('save list: ' + str(t1 - t0))
 		
 	def to_mesh(self):
-		trackobject_to_obj_init()
+		trackobject.create_groups()
 		for name, joe in self.joe.items():
 			image = None
-			trackobject = self.list.get(name)
-			if trackobject:
-				imagename = trackobject.values[1]
+			trackobj = self.list.get(name)
+			if trackobj:
+				imagename = trackobj.values[1]
 				image = self.images[imagename]
 				obj = joe.to_mesh(name, image)
-				trackobject.to_obj(obj)
+				trackobj.to_obj(obj)
 			else:
 				print(name + ' not imported. Not in list.txt.')
 		
 	def from_mesh(self):
 		objlist = bpy.context.scene.objects
-		trackobject_from_obj_init()
+		trackobject.set_groups()
 		for obj in objlist:
 			if obj.type != 'MESH':
 				continue
@@ -493,38 +493,6 @@ class joe_pack:
 				imagepath = path.join(dir, imagename)
 				self.images[imagename] = load_image(imagepath)
 
-
-def trackobject_to_obj_init():
-	trackobject.grp_surf = []
-	trackobject.grp = {}
-	for name in ('mipmap', 'nolighting', 'skybox', 'transparent', 'doublesided', 'collidable', 'shadow'):
-		grp = bpy.data.groups.get(name)
-		if grp == None:
-			grp = bpy.data.groups.new(name)
-		trackobject.grp[name] = grp.objects
-
-
-def trackobject_from_obj_init():
-	trackobject_to_obj_init()
-	trackobject.is_surf = []
-	for grp in bpy.data.groups:
-		if grp.name.startswith('surface'):
-			trackobject.is_surf.append((grp.name.split('-')[-1], set(grp.objects)))
-		elif grp.name == 'mipmap':
-			trackobject.is_mipmap = set(grp.objects)
-		elif grp.name == 'nolighting':
-			trackobject.is_nolighting = set(grp.objects)
-		elif grp.name == 'skybox':
-			trackobject.is_skybox = set(grp.objects)
-		elif grp.name == 'collidable':
-			trackobject.is_collidable = set(grp.objects)
-		elif grp.name == 'shadow':
-			trackobject.is_shadow = set(grp.objects)
-		elif grp.name == 'transparent':
-			trackobject.is_transparent = set(grp.objects)
-		elif grp.name == 'doublesided':
-			trackobject.is_doublesided = set(grp.objects)
-
 class trackobject:
 	names = ('model', 'texture', 'mipmap', 'lighting', 'skybox', 'blend',\
 			'bump length', 'bump amplitude', 'drivable', 'collidable',\
@@ -532,8 +500,48 @@ class trackobject:
 			'shadow', 'clamp', 'surface')
 	namemap = dict(zip(names, range(17)))
 	
+	@staticmethod	
+	def create_groups():
+		trackobject.grp_surf = []
+		trackobject.grp = {}
+		for name in ('mipmap', 'nolighting', 'skybox', 'transparent',\
+					'doublesided', 'collidable', 'shadow', 'clampu', 'clampv'):
+			grp = bpy.data.groups.get(name)
+			if grp == None:
+				grp = bpy.data.groups.new(name)
+			trackobject.grp[name] = grp.objects
+	
+	@staticmethod
+	def set_groups():
+		trackobject.create_groups()
+		trackobject.is_surf = []
+		for grp in bpy.data.groups:
+			if grp.name == 'mipmap':
+				trackobject.is_mipmap = set(grp.objects)
+			elif grp.name == 'nolighting':
+				trackobject.is_nolighting = set(grp.objects)
+			elif grp.name == 'skybox':
+				trackobject.is_skybox = set(grp.objects)
+			elif grp.name == 'transparent':
+				trackobject.is_transparent = set(grp.objects)
+			elif grp.name == 'doublesided':
+				trackobject.is_doublesided = set(grp.objects)
+			elif grp.name == 'collidable':
+				trackobject.is_collidable = set(grp.objects)
+			elif grp.name == 'shadow':
+				trackobject.is_shadow = set(grp.objects)
+			elif grp.name == 'clampu':
+				trackobject.is_clampu = set(grp.objects)
+			elif grp.name == 'clampv':
+				trackobject.is_clampv = set(grp.objects)
+			elif grp.name.startswith('surface'):
+				trackobject.is_surf.append((grp.name.split('-')[-1], set(grp.objects)))
+	
 	def __init__(self):
-		self.values = ['none', 'none', '1', '0', '0', '0', '1.0', '0.0', '0', '0', '1.0', '0.9', '1.0', '0.0', '0', '0', '0']
+		self.values = ['none', 'none', '1', '0', '0', '0',\
+						'1.0', '0.0', '0', '0',\
+						'1.0', '0.9', '1.0', '0.0',\
+						'0', '0', '0']
 	
 	def read(self, name, list_file):
 		i = 0
@@ -561,9 +569,11 @@ class trackobject:
 		if self.values[3] == '1': trackobject.grp['nolighting'].link(object)
 		if self.values[4] == '1': trackobject.grp['skybox'].link(object)
 		if self.values[5] == '1': trackobject.grp['transparent'].link(object)
-		elif self.values[5] == '2': trackobject.grp['doublesided'].link(object)
+		if self.values[5] == '2': trackobject.grp['doublesided'].link(object)
 		if self.values[8] == '1' or self.values[9] == '1': trackobject.grp['collidable'].link(object)
 		if self.values[14] == '1': trackobject.grp['shadow'].link(object)
+		if self.values[15] == '1' or self.values[15] == '3': trackobject.grp['clampu'].link(object)
+		if self.values[15] == '2' or self.values[15] == '3': trackobject.grp['clampv'].link(object)
 		surfid = int(self.values[16])
 		while surfid >= len(trackobject.grp_surf):
 			surfnum = len(trackobject.grp_surf)
@@ -582,17 +592,19 @@ class trackobject:
 		self.values[2] = '1' if object in trackobject.is_mipmap else '0'
 		self.values[3] = '1' if object in trackobject.is_nolighting else '0'
 		self.values[4] = '1' if object in trackobject.is_skybox else '0'
-		self.values[9] = '1' if object in trackobject.is_collidable else '0'
-		self.values[14] = '1' if object in trackobject.is_shadow else '0'
 		if object in trackobject.is_transparent: self.values[5] = '1'
 		elif object in trackobject.is_doublesided: self.values[5] = '2'
 		else: self.values[5] = '0'
+		self.values[9] = '1' if object in trackobject.is_collidable else '0'
+		self.values[14] = '1' if object in trackobject.is_shadow else '0'
+		self.values[15] = '1' if object in trackobject.is_clampu else '0'
+		if object in trackobject.is_clampv:
+			self.values[15] = '2' if self.values[15] == '0' else '3'
 		for name, grp in self.is_surf:
 			if object in grp:
 				self.values[16] = name
 				break
 		return self
-
 
 class util:
 	# helper class to filter duplicates
