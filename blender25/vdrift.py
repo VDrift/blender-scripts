@@ -18,7 +18,7 @@
 
 bl_info = {
 	'name': 'VDrift JOE/JPK format',
-	'description': 'Import-Export to VDrift JOE and JPK files (.joe, .jpk)',
+	'description': 'Import-Export to VDrift JOE files (.joe)',
 	'author': 'NaN, port of VDrift blender24 scripts',
 	'version': (0, 7),
 	'blender': (2, 5, 8),
@@ -30,7 +30,7 @@ bl_info = {
 	'category': 'Import-Export'}
 
 import bpy
-from bpy.props import StringProperty
+from bpy.props import StringProperty, BoolProperty
 from bpy_extras.io_utils import ExportHelper, ImportHelper
 from bpy_extras.image_utils import load_image
 from struct import Struct
@@ -309,34 +309,23 @@ class joe_pack:
 		self.list = {}
 		self.images = {}
 		self.surfaces = []
-			
-	def load(self, filename):
-		from time import clock
-		# don't change call order
-		t0 = clock()
-		self.load_list(filename)
-		t1 = clock()
-		print('load list: ' + str(t1 - t0))
-		t0 = t1
-		self.load_images(filename)
-		t1 = clock()
-		print('load images: ' + str(t1 - t0))
-		t0 = t1
-		self.load_jpk(filename)
-		t1 = clock()
-		print('load jpk: ' + str(t1 - t0))
-		return self
 	
-	def save(self, filename):
-		from time import clock
-		t0 = clock()
-		self.save_jpk(filename)
-		t1 = clock()
-		print('save jpk: ' + str(t1 - t0))
-		t0 = t1
-		self.save_list(filename)
-		t1 = clock()
-		print('save list: ' + str(t1 - t0))
+	@staticmethod
+	def load(filename):
+		# don't change call order
+		jpk = joe_pack()
+		jpk.load_list(filename)
+		jpk.load_images(filename)
+		jpk.load_jpk(filename)
+		return jpk
+	
+	@staticmethod
+	def save(filename, save_list, save_jpk):
+		jpk = joe_pack().from_mesh()
+		if save_jpk:
+			jpk.save_jpk(filename)
+		if save_list:
+			jpk.save_list(filename)
 		
 	def to_mesh(self):
 		trackobject.create_groups()
@@ -748,16 +737,19 @@ class export_jpk(bpy.types.Operator, ExportHelper):
 	filter_glob = StringProperty(
 			default='*.jpk',
 			options={'HIDDEN'})
+	export_list = BoolProperty(
+			name='Export properties (list.txt)',
+			description='Export track objects properties',
+			default=True)
+	export_jpk = BoolProperty(
+			name='Export objects (objects.jpk)',
+			description='Export track objeckts as JPK',
+			default=True)
 	
 	def execute(self, context):
 		props = self.properties
 		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
-		try:
-			jpk = joe_pack().from_mesh()
-			jpk.save(filepath)
-		finally:
-			self.report({'INFO'},  filepath + ' exported')
-		
+		joe_pack.save(filepath, self.export_list, self.export_jpk)
 		return {'FINISHED'}
 		
 	def invoke(self, context, event):
@@ -776,11 +768,8 @@ class import_jpk(bpy.types.Operator, ImportHelper):
 	def execute(self, context):
 		props = self.properties
 		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
-		try:
-			jpk = joe_pack().load(filepath)
-			jpk.to_mesh()
-		finally:
-			self.report({'INFO'},  filepath + ' imported')
+		jpk = joe_pack.load(filepath)
+		jpk.to_mesh()
 		return {'FINISHED'}
 
 def menu_export_joe(self, context):
