@@ -743,7 +743,7 @@ class export_jpk(bpy.types.Operator, ExportHelper):
 			default=True)
 	export_jpk = BoolProperty(
 			name='Export objects (objects.jpk)',
-			description='Export track objeckts as JPK',
+			description='Export track objects as JPK',
 			default=True)
 	
 	def execute(self, context):
