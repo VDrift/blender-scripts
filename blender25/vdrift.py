@@ -682,17 +682,11 @@ class export_joe(bpy.types.Operator, ExportHelper):
 	def execute(self, context):
 		props = self.properties
 		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
-		
-		if len(bpy.context.selected_objects[:]) == 0:
+		if len(bpy.context.selected_objects[:]) != 1:
 			raise NameError('Please select one object!')
-		
-		if len(bpy.context.selected_objects[:]) > 1:
-			raise NameError('Please select a single object!')
-		
 		object = self.object
 		if object.type != 'MESH':
-			raise NameError('Selected object must be a mesh!')
-			
+			raise NameError('Selected object must be a mesh!')	
 		try:
 			file = open(filepath, 'wb')
 			joe = joe_obj().from_mesh(object)
@@ -700,7 +694,6 @@ class export_joe(bpy.types.Operator, ExportHelper):
 			file.close()
 		finally:
 			self.report({'INFO'},  object.name + ' exported')
-		
 		return {'FINISHED'}
 		
 	def invoke(self, context, event):
@@ -729,6 +722,33 @@ class import_joe(bpy.types.Operator, ImportHelper):
 			self.report({'INFO'},  filepath + ' imported')
 		return {'FINISHED'}
 
+class import_image(bpy.types.Operator, ImportHelper):
+	bl_idname = 'import.image'
+	bl_label = 'Import texture'
+	filename_ext = '.png'
+	filter_glob = StringProperty(
+		default='*.png',
+		options={'HIDDEN'})
+	
+	def execute(self, context):
+		props = self.properties
+		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
+		image = load_image(filepath)
+		if image == None:
+			raise NameError('Failed to load image!')
+		if len(bpy.context.selected_objects[:]) != 1:
+			raise NameError('Please select one object!')
+		object = bpy.context.selected_objects[0]
+		if object.type != 'MESH':
+			raise NameError('Selected object must be a mesh!')
+		if len(object.data.faces) == 0:
+			raise NameError('Selected object has no faces!')
+		if len(object.data.uv_textures) == 0:
+			raise NameError('Selected object has no texture coordinates!')
+		for mf in object.data.uv_textures[0].data:
+			mf.image = image
+			mf.use_image = True
+		return {'FINISHED'}
 
 class export_jpk(bpy.types.Operator, ExportHelper):
 	bl_idname = 'export.jpk'
@@ -779,6 +799,8 @@ def menu_export_joe(self, context):
 def menu_import_joe(self, context):
 	self.layout.operator(import_joe.bl_idname, text = 'VDrift JOE (.joe)')
 
+def menu_import_image(self, context):
+	self.layout.operator(import_image.bl_idname, text = 'VDrift texture (.png)')
 
 def menu_export_jpk(self, context):
 	self.layout.operator(export_jpk.bl_idname, text = 'VDrift JPK (.jpk)')
@@ -792,6 +814,7 @@ def register():
 	bpy.utils.register_module(__name__)
 	bpy.types.INFO_MT_file_export.append(menu_export_joe)
 	bpy.types.INFO_MT_file_import.append(menu_import_joe)
+	bpy.types.INFO_MT_file_import.append(menu_import_image)
 	bpy.types.INFO_MT_file_export.append(menu_export_jpk)
 	bpy.types.INFO_MT_file_import.append(menu_import_jpk)
 
@@ -800,6 +823,7 @@ def unregister():
 	bpy.utils.unregister_module(__name__)
 	bpy.types.INFO_MT_file_export.remove(menu_export_joe)
 	bpy.types.INFO_MT_file_import.remove(menu_import_joe)
+	bpy.types.INFO_MT_file_import.remove(menu_import_image)
 	bpy.types.INFO_MT_file_export.remove(menu_export_jpk)
 	bpy.types.INFO_MT_file_import.remove(menu_import_jpk)
 
