@@ -747,7 +747,6 @@ class import_image(bpy.types.Operator, ImportHelper):
 			raise NameError('Selected object has no texture coordinates!')
 		for mf in object.data.uv_textures[0].data:
 			mf.image = image
-			mf.use_image = True
 		return {'FINISHED'}
 
 class export_jpk(bpy.types.Operator, ExportHelper):
