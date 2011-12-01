@@ -233,9 +233,7 @@ class joe_frame:
 			mf.uv1 = self.texcoords[f.texture_index[0]]
 			mf.uv2 = self.texcoords[f.texture_index[1]]
 			mf.uv3 = self.texcoords[f.texture_index[2]]
-			if (image):
-				mf.image = image
-				mf.use_image = True
+			if (image): mf.image = image
 		
 		mesh.validate()
 		mesh.update()
