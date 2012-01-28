@@ -309,20 +309,20 @@ class joe_pack:
 		self.surfaces = []
 	
 	@staticmethod
-	def load(filename):
+	def read(filename):
 		# don't change call order
 		jpk = joe_pack()
 		jpk.load_list(filename)
 		jpk.load_images(filename)
-		jpk.load_jpk(filename)
+		jpk.load(filename)
 		return jpk
 	
 	@staticmethod
-	def save(filename, save_list, save_jpk):
+	def write(filename, write_list, write_jpk):
 		jpk = joe_pack().from_mesh()
-		if save_jpk:
-			jpk.save_jpk(filename)
-		if save_list:
+		if write_jpk:
+			jpk.save(filename)
+		if write_list:
 			jpk.save_list(filename)
 		
 	def to_mesh(self):
@@ -365,12 +365,12 @@ class joe_pack:
 				objname = objname + '.joe'
 				trackobj.values[0] = objname
 			self.list[objname] = trackobj
-			self.joe[objname] = joe_obj().from_mesh(obj)
+			self.joe[objname] = obj
 			self.maxstrlen = max(self.maxstrlen, len(objname))
 		self.numobjs = len(self.joe)
 		return self
 		
-	def load_jpk(self, filename):
+	def load(self, filename):
 		file = open(filename, 'rb')
 		# header
 		version = file.read(len(joe_pack.versionstr))
@@ -406,7 +406,7 @@ class joe_pack:
 			self.joe[name] = joe
 		file.close()
 	
-	def save_jpk(self, filename):
+	def save(self, filename):
 		try:
 			file = open(filename, 'rb+')
 		except IOError:
@@ -424,8 +424,9 @@ class joe_pack:
 			file.write(name.encode('ascii'))
 		# write data / build fat
 		fat = []
-		for name, joe in self.joe.items():
+		for name, obj in self.joe.items():
 			offset = file.tell()
+			joe = joe_obj().from_mesh(obj)
 			joe.save(file)
 			length = file.tell() - offset
 			fat.append((offset, length, name))
@@ -574,8 +575,10 @@ class trackobject:
 	
 	# set from object
 	def from_obj(self, object):
-		self.values[0] = object.get('model', object.name)
-		self.values[1] = object.get('texture', object.data.uv_textures[0].data[0].image.name)
+		model = object.name
+		texture = path.basename(object.data.uv_textures[0].data[0].image.filepath)
+		self.values[0] = object.get('model', model)
+		self.values[1] = object.get('texture', texture)
 		self.values[2] = '1' if object in trackobject.is_mipmap else '0'
 		self.values[3] = '1' if object in trackobject.is_nolighting else '0'
 		self.values[4] = '1' if object in trackobject.is_skybox else '0'
@@ -766,7 +769,7 @@ class export_jpk(bpy.types.Operator, ExportHelper):
 	def execute(self, context):
 		props = self.properties
 		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
-		joe_pack.save(filepath, self.export_list, self.export_jpk)
+		joe_pack.write(filepath, self.export_list, self.export_jpk)
 		return {'FINISHED'}
 		
 	def invoke(self, context, event):
@@ -785,7 +788,7 @@ class import_jpk(bpy.types.Operator, ImportHelper):
 	def execute(self, context):
 		props = self.properties
 		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
-		jpk = joe_pack.load(filepath)
+		jpk = joe_pack.read(filepath)
 		jpk.to_mesh()
 		return {'FINISHED'}
 
