@@ -596,6 +596,67 @@ class trackobject:
 				break
 		return self
 
+
+class roads:
+	@staticmethod
+	def load(path):
+		file = open(path, 'r')
+		roadnum = int(file.readline())
+		file.readline()
+		for i in range(roadnum):
+			roads.load_road(file, 'road.' + str(i))
+
+	@staticmethod
+	def save(object):
+		#file = open(path, 'w')
+
+	@staticmethod
+	def load_road(file, name):
+		patchnum = int(file.readline())
+		file.readline()
+		
+		# new mesh
+		mesh = bpy.data.meshes.new(name)
+		mesh.vertices.add(patchnum * 4 + 4)
+		mesh.faces.add(patchnum * 3)
+		mesh.uv_textures.new()
+		
+		# parse road
+		lines = [None] * 16
+		for p in range(patchnum):
+			# road is stored reversed
+			for n in range(15, -1, -1):
+				lines[n] = file.readline()
+			file.readline()
+			# vertices first row, other rows are interpolated on export to guarantee continuity
+			for n in range(4):
+				i = p * 4 + n
+				xyz = [float(s) for s in lines[n].split()]
+				mesh.vertices[i].co = (xyz[2], xyz[0], xyz[1])
+			# faces
+			for n in range(3):
+				i = p * 3 + n
+				vi = p * 4 + n
+				mesh.faces[i].vertices_raw = (vi, vi + 4, vi + 5, vi + 1)
+				mesh.faces[i].use_smooth = True
+				u, v = 1 - n/3.0, float(p)
+				mesh.uv_textures[0].data[i].uv_raw = (u, v, u, v + 1, u - 1/3.0, v + 1, u - 1/3.0, v)
+		# last row
+		for n in range(4):
+			i = patchnum * 4 + n
+			xyz = [float(s) for s in lines[n + 12].split()]
+			mesh.vertices[i].co = (xyz[2], xyz[0], xyz[1])
+		
+		mesh.validate()
+		mesh.update()
+
+		# new object
+		object = bpy.data.objects.new(name, mesh)
+		bpy.context.scene.objects.link(object)
+
+	#@staticmethod
+	#def save_road(file, mesh):	
+
 class util:
 	# helper class to filter duplicates
 	class indexed_set(object):
@@ -792,6 +853,41 @@ class import_jpk(bpy.types.Operator, ImportHelper):
 		jpk.to_mesh()
 		return {'FINISHED'}
 
+
+class export_trk(bpy.types.Operator, ExportHelper):
+	bl_idname = 'export.trk'
+	bl_label = 'Export Vdrift roads'
+	filename_ext = '.trk'
+	filter_glob = StringProperty(
+			default='*.trk',
+			options={'HIDDEN'})
+	
+	def execute(self, context):
+		props = self.properties
+		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
+		roads.save(filepath)
+		return {'FINISHED'}
+		
+	def invoke(self, context, event):
+		context.window_manager.fileselect_add(self);
+		return {'RUNNING_MODAL'}
+
+
+class import_trk(bpy.types.Operator, ImportHelper):
+	bl_idname = 'import.trk'
+	bl_label = 'Import VDrift roads'
+	filename_ext = '.trk'
+	filter_glob = StringProperty(
+		default='*.trk',
+		options={'HIDDEN'})
+	
+	def execute(self, context):
+		props = self.properties
+		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
+		roads.load(filepath)
+		return {'FINISHED'}
+
+		
 def menu_export_joe(self, context):
 	self.layout.operator(export_joe.bl_idname, text = 'VDrift JOE (.joe)')
 
@@ -799,8 +895,10 @@ def menu_export_joe(self, context):
 def menu_import_joe(self, context):
 	self.layout.operator(import_joe.bl_idname, text = 'VDrift JOE (.joe)')
 
+
 def menu_import_image(self, context):
-	self.layout.operator(import_image.bl_idname, text = 'VDrift texture (.png)')
+	self.layout.operator(import_image.bl_idname, text = 'VDrift Texture (.png)')
+
 
 def menu_export_jpk(self, context):
 	self.layout.operator(export_jpk.bl_idname, text = 'VDrift JPK (.jpk)')
@@ -810,6 +908,14 @@ def menu_import_jpk(self, context):
 	self.layout.operator(import_jpk.bl_idname, text = 'VDrift JPK (.jpk)')
 
 
+def menu_export_trk(self, context):
+	self.layout.operator(export_trk.bl_idname, text = 'VDrift Roads (.trk)')
+
+
+def menu_import_trk(self, context):
+	self.layout.operator(import_trk.bl_idname, text = 'VDrift Roads (.trk)')
+
+
 def register():
 	bpy.utils.register_module(__name__)
 	bpy.types.INFO_MT_file_export.append(menu_export_joe)
@@ -817,7 +923,8 @@ def register():
 	bpy.types.INFO_MT_file_import.append(menu_import_image)
 	bpy.types.INFO_MT_file_export.append(menu_export_jpk)
 	bpy.types.INFO_MT_file_import.append(menu_import_jpk)
-
+	bpy.types.INFO_MT_file_export.append(menu_export_trk)
+	bpy.types.INFO_MT_file_import.append(menu_import_trk)
 
 def unregister():
 	bpy.utils.unregister_module(__name__)
@@ -826,7 +933,8 @@ def unregister():
 	bpy.types.INFO_MT_file_import.remove(menu_import_image)
 	bpy.types.INFO_MT_file_export.remove(menu_export_jpk)
 	bpy.types.INFO_MT_file_import.remove(menu_import_jpk)
-
+	bpy.types.INFO_MT_file_export.remove(menu_export_trk)
+	bpy.types.INFO_MT_file_import.remove(menu_import_trk)
 
 if __name__ == '__main__':
 	register()
