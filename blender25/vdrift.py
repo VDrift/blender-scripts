@@ -596,7 +596,6 @@ class trackobject:
 				break
 		return self
 
-
 class roads:
 	@staticmethod
 	def load(path):
@@ -607,20 +606,26 @@ class roads:
 			roads.load_road(file, 'road.' + str(i))
 
 	@staticmethod
-	def save(object):
-		#file = open(path, 'w')
-
+	def save(path):
+		file = open(path, 'w')
+		meshes = []
+		i = 0
+		while 'road.' + str(i) in bpy.data.meshes:
+			meshes.append(bpy.data.meshes['road.' + str(i)])
+			i = i + 1
+		file.write(str(len(meshes)) + '\n\n')
+		for m in meshes:
+			roads.save_road(file, m)
+		
 	@staticmethod
 	def load_road(file, name):
 		patchnum = int(file.readline())
 		file.readline()
-		
 		# new mesh
 		mesh = bpy.data.meshes.new(name)
 		mesh.vertices.add(patchnum * 4 + 4)
 		mesh.faces.add(patchnum * 3)
 		mesh.uv_textures.new()
-		
 		# parse road
 		lines = [None] * 16
 		for p in range(patchnum):
@@ -628,7 +633,7 @@ class roads:
 			for n in range(15, -1, -1):
 				lines[n] = file.readline()
 			file.readline()
-			# vertices first row, other rows are interpolated on export to guarantee continuity
+			# vertices first row, other rows are interpolated on export
 			for n in range(4):
 				i = p * 4 + n
 				xyz = [float(s) for s in lines[n].split()]
@@ -646,17 +651,70 @@ class roads:
 			i = patchnum * 4 + n
 			xyz = [float(s) for s in lines[n + 12].split()]
 			mesh.vertices[i].co = (xyz[2], xyz[0], xyz[1])
-		
+		# new object
 		mesh.validate()
 		mesh.update()
-
-		# new object
 		object = bpy.data.objects.new(name, mesh)
 		bpy.context.scene.objects.link(object)
 
-	#@staticmethod
-	#def save_road(file, mesh):	
-
+	@staticmethod
+	def save_road(file, mesh):
+		patchnum = int(len(mesh.faces) / 3)
+		road = [None] * 16 * patchnum
+		if len(mesh.uv_textures) == 0 or len(mesh.uv_textures[0].data) == 0:
+			raise NameError("Road mesh %s has no uv coordinates" % mesh.name)
+		# get first, last patch rows from faces
+		for i, f in enumerate(mesh.faces):
+			tf = mesh.uv_textures[0].data[i]
+			for n in range(4):
+				pointid = int(tf.uv_raw[2 * n] * 3)
+				patchid = int(tf.uv_raw[2 * n + 1])
+				id = patchid * 16 + pointid
+				if patchid < patchnum:
+					road[id] = mesh.vertices[f.vertices[n]].co
+				if patchid > 0:
+					road[id - 4] = mesh.vertices[f.vertices[n]].co
+		# calculate middle rows
+		for i in range(patchnum - 1):
+			roads.attach_patches(road, i, i + 1)
+		# closed/open road
+		if (road[0] - road[-1]).length < 1E-3:
+			roads.attach_patches(road, -1, 0)
+		else:
+			roads.set_middlerow(road, 0, 1)
+			roads.set_middlerow(road, -1, 2)
+		# write road
+		file.write(str(patchnum) + '\n\n')
+		for i in range(patchnum):
+			for n in range(3, -1, -1):
+				for m in range(4):
+					p = road[i * 16 + n * 4 + m]
+					file.write('%.4f %.4f %.4f\n' % (p[1], p[2], p[0]))
+			file.write('\n')
+	
+	# p0: first patch index
+	# p1: second patch index
+	@staticmethod
+	def attach_patches(road, p0, p1):
+		r0, r1 = p0 * 16, p1 * 16
+		for n in range(4):
+			i0, i1 = r0 + n, r1 + n
+			slope = (road[i1] - road[i0]).normalized()
+			len0 = (road[i0 + 12] - road[i0]).length
+			len1 = (road[i1 + 12] - road[i1]).length
+			scale = min(len1, len0) / 3
+			road[i0 + 8] = road[i0 + 12] - slope * scale
+			road[i1 + 4] = road[i1] + slope * scale
+	
+	# pi: patch index [0, patchnum)
+	# ri: middle row index 1, 2
+	@staticmethod
+	def set_middlerow(road, pi, ri):
+		scale = ri / 3
+		for n in range(4):
+			i = pi * 16 + n
+			road[i + ri * 4] = road[i] + (road[i + 12] - road[i]) * scale
+		
 class util:
 	# helper class to filter duplicates
 	class indexed_set(object):
