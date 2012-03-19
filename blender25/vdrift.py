@@ -696,13 +696,15 @@ class roads:
 	# p1: second patch index
 	@staticmethod
 	def attach_patches(road, p0, p1):
-		r0, r1 = p0 * 16, p1 * 16
+		r0 = p0 * 16
+		r1 = p1 * 16
 		for n in range(4):
-			i0, i1 = r0 + n, r1 + n
-			slope = (road[i1] - road[i0]).normalized()
+			i0 = r0 + n
+			i1 = r1 + n
+			slope = (road[i1 + 12] - road[i0]).normalized()
 			len0 = (road[i0 + 12] - road[i0]).length
 			len1 = (road[i1 + 12] - road[i1]).length
-			scale = min(len1, len0) / 3
+			scale = min(len1, len0) / 3.0 #old: (len1 + len0) / 6.0
 			road[i0 + 8] = road[i0 + 12] - slope * scale
 			road[i1 + 4] = road[i1] + slope * scale
 	
