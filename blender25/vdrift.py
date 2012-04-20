@@ -36,6 +36,7 @@ from bpy_extras.image_utils import load_image
 from struct import Struct
 from os import path
 
+
 class joe_vertex:
 	bstruct = Struct('<fff')
 	
@@ -240,6 +241,7 @@ class joe_frame:
 		object = bpy.data.objects.new(name, mesh)
 		bpy.context.scene.objects.link(object)
 		return object
+
 
 class joe_obj:
 	__slots__ = 'ident', 'version', 'num_faces', 'num_frames', 'frames'
@@ -481,6 +483,7 @@ class joe_pack:
 				imagepath = path.join(dir, imagename)
 				self.images[imagename] = load_image(imagepath)
 
+
 class trackobject:
 	names = ('model', 'texture', 'mipmap', 'lighting', 'skybox', 'blend',\
 			'bump length', 'bump amplitude', 'drivable', 'collidable',\
@@ -595,6 +598,7 @@ class trackobject:
 				self.values[16] = name
 				break
 		return self
+
 
 class roads:
 	@staticmethod
@@ -716,7 +720,94 @@ class roads:
 		for n in range(4):
 			i = pi * 16 + n
 			road[i + ri * 4] = road[i] + (road[i + 12] - road[i]) * scale
-		
+
+
+class track:
+	@staticmethod
+	def load(path):
+		start_position = {}
+		obj = track.get_info()
+		file = open(path, 'r')
+		for line in file:
+			line = line.rstrip('\n')
+			if not line: continue
+			name, value = line.split(' = ', 1)
+			# generic properties (as strings for now)
+			if name in obj:
+				#if value == 'on' or value == 'yes': value = True
+				#elif value == 'off' or value == 'no': value = False
+				#ob[name] = type(ob[name])(value)
+				obj[name] = value
+			# lap sequences (as strings for now)
+			elif name.startswith('lap sequence '):
+				road, patch, unused = value.split(',', 2)
+				obj[name] = road.split('.', 1)[0] + ':' + patch.split('.', 1)[0]
+			# start positions
+			elif name.startswith('start position '):
+				x, y, z = value.split(',', 2)
+				track.get_box(name).location = (float(z), float(x), float(y))
+			elif name.startswith('start orientation '):
+				rad = 0.0174532925
+				x, y, z = value.split(',', 2)
+				x, y, z = float(x) * rad, float(y) * rad, float(z) * rad
+				name = 'start position ' + name.rsplit(' ', 1)[1]
+				track.get_box(name).rotation_euler = (z, x, y)
+		file.close()
+
+	@staticmethod
+	def save(path):
+		file = open(path, 'w')
+		obj = track.get_info()
+		lap_sequence = []
+		for k, v in obj.items():
+			if k.startswith('lap sequence'):
+				lap_sequence.append((k, v))
+			else:
+				file.write(k + ' = ' + str(v) + '\n')
+		file.write('lap sequences = ' + str(len(lap_sequence)) + '\n')
+		for v in lap_sequence:
+			name, road, patch = v[0], v[1].split(':', 1)
+			file.write(name + ' = ' + road + ',' + patch + ',0\n')
+		n = 0
+		while True:
+			name = 'start position ' + str(n)
+			obj = bpy.data.objects.get(name)
+			if not obj: break
+			x, y, z = obj.location
+			file.write('start position %s = %.4f,%.4f,%.4f\n' % (str(n), y, z, x))
+			deg = 57.2957795
+			x, y, z = obj.rotation_euler
+			x, y, z = x * deg, y * deg, z * deg
+			file.write('start orientation %s = %.2f,%.2f,%.2f\n' % (str(n), y, z, x))
+			n = n + 1
+		file.close()
+
+	@staticmethod
+	def get_info():
+		obj = bpy.data.objects.get('track_info')
+		if not obj:
+			obj = bpy.data.objects.new('track_info', None)
+			obj['cull faces'] = 'on'
+			obj['vertical tracking skyboxes'] = 'no'
+			obj['non-treaded friction coefficient'] = '1.0'
+			obj['treaded friction coefficient'] = '0.9'
+			bpy.context.scene.objects.link(obj)
+		return obj;
+
+	@staticmethod
+	def get_box(name):
+		obj = bpy.data.objects.get(name)
+		if not obj:
+			verts = [(1,-1,-1), (1,-1,1),(-1,-1,1),(-1,-1,-1),(1,1,-1),(1,1,1),(-1,1,1),(-1,1,-1)]
+			edges = [(0,1),(1,2),(2,3),(3,7),(4,7),(5,6),(6,7),(0,3),(4,5),(1,5),(2,6),(0,4)]
+			mesh = bpy.data.meshes.new("cube")
+			mesh.from_pydata(verts, edges, [])
+			obj = bpy.data.objects.new(name, mesh)
+			bpy.context.scene.objects.link(obj)
+			obj.scale = (4.0, 1.8, 1.0)
+		return obj
+
+
 class util:
 	# helper class to filter duplicates
 	class indexed_set(object):
@@ -844,6 +935,7 @@ class import_joe(bpy.types.Operator, ImportHelper):
 			self.report({'INFO'},  filepath + ' imported')
 		return {'FINISHED'}
 
+
 class import_image(bpy.types.Operator, ImportHelper):
 	bl_idname = 'import.image'
 	bl_label = 'Import texture'
@@ -870,6 +962,7 @@ class import_image(bpy.types.Operator, ImportHelper):
 		for mf in object.data.uv_textures[0].data:
 			mf.image = image
 		return {'FINISHED'}
+
 
 class export_jpk(bpy.types.Operator, ExportHelper):
 	bl_idname = 'export.jpk'
@@ -947,7 +1040,41 @@ class import_trk(bpy.types.Operator, ImportHelper):
 		roads.load(filepath)
 		return {'FINISHED'}
 
+
+class export_track(bpy.types.Operator, ExportHelper):
+	bl_idname = 'export.track'
+	bl_label = 'Export Vdrift track'
+	filename_ext = '.txt'
+	filter_glob = StringProperty(
+			default='track.txt',
+			options={'HIDDEN'})
+	
+	def execute(self, context):
+		props = self.properties
+		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
+		track.save(filepath)
+		return {'FINISHED'}
 		
+	def invoke(self, context, event):
+		context.window_manager.fileselect_add(self);
+		return {'RUNNING_MODAL'}
+
+
+class import_track(bpy.types.Operator, ImportHelper):
+	bl_idname = 'import.track'
+	bl_label = 'Import VDrift track'
+	filename_ext = '.txt'
+	filter_glob = StringProperty(
+		default='track.txt',
+		options={'HIDDEN'})
+	
+	def execute(self, context):
+		props = self.properties
+		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
+		track.load(filepath)
+		return {'FINISHED'}
+
+
 def menu_export_joe(self, context):
 	self.layout.operator(export_joe.bl_idname, text = 'VDrift JOE (.joe)')
 
@@ -976,6 +1103,14 @@ def menu_import_trk(self, context):
 	self.layout.operator(import_trk.bl_idname, text = 'VDrift Roads (.trk)')
 
 
+def menu_export_track(self, context):
+	self.layout.operator(export_track.bl_idname, text = 'VDrift Track Info (track.txt)')
+
+
+def menu_import_track(self, context):
+	self.layout.operator(import_track.bl_idname, text = 'VDrift Track Info (track.txt)')
+
+
 def register():
 	bpy.utils.register_module(__name__)
 	bpy.types.INFO_MT_file_export.append(menu_export_joe)
@@ -985,6 +1120,9 @@ def register():
 	bpy.types.INFO_MT_file_import.append(menu_import_jpk)
 	bpy.types.INFO_MT_file_export.append(menu_export_trk)
 	bpy.types.INFO_MT_file_import.append(menu_import_trk)
+	bpy.types.INFO_MT_file_export.append(menu_export_track)
+	bpy.types.INFO_MT_file_import.append(menu_import_track)
+
 
 def unregister():
 	bpy.utils.unregister_module(__name__)
@@ -995,6 +1133,9 @@ def unregister():
 	bpy.types.INFO_MT_file_import.remove(menu_import_jpk)
 	bpy.types.INFO_MT_file_export.remove(menu_export_trk)
 	bpy.types.INFO_MT_file_import.remove(menu_import_trk)
+	bpy.types.INFO_MT_file_export.remove(menu_export_track)
+	bpy.types.INFO_MT_file_import.remove(menu_import_track)
+
 
 if __name__ == '__main__':
 	register()
