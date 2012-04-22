@@ -804,7 +804,7 @@ class track:
 			mesh.from_pydata(verts, edges, [])
 			obj = bpy.data.objects.new(name, mesh)
 			bpy.context.scene.objects.link(obj)
-			obj.scale = (4.0, 1.8, 1.0)
+			obj.scale = (2.0, 0.9, 0.5)
 		return obj
 
 
