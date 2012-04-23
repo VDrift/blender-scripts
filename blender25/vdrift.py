@@ -806,6 +806,7 @@ class track:
 			obj = bpy.data.objects.new(name, mesh)
 			bpy.context.scene.objects.link(obj)
 			obj.scale = (2.0, 0.9, 0.5)
+			obj.show_axis = True
 		return obj
 
 
