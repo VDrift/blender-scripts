@@ -766,7 +766,8 @@ class track:
 				file.write(k + ' = ' + str(v) + '\n')
 		file.write('lap sequences = ' + str(len(lap_sequence)) + '\n')
 		for v in lap_sequence:
-			name, road, patch = v[0], v[1].split(':', 1)
+			name = v[0]
+			road, patch = v[1].split(':', 1)
 			file.write(name + ' = ' + road + ',' + patch + ',0\n')
 		n = 0
 		while True:
