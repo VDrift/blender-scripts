@@ -20,9 +20,8 @@ bl_info = {
 	'name': 'VDrift JOE/JPK format',
 	'description': 'Import-Export to VDrift JOE files (.joe)',
 	'author': 'NaN, port of VDrift blender24 scripts',
-	'version': (0, 7),
-	'blender': (2, 5, 8),
-	'api': 35622,
+	'version': (0, 8),
+	'blender': (2, 6, 3),
 	'location': 'File > Import-Export',
 	'warning': '',
 	'wiki_url': 'http://', 
@@ -147,7 +146,7 @@ class joe_frame:
 		vertices = util.indexed_set()
 		texcoords = util.indexed_set()
 		# get vertices and normals
-		for f in mesh.faces:
+		for f in mesh.tessfaces:
 			jf = joe_face()
 			jf.vertex_index = [vertices.get(mesh.vertices[vi].co) for vi in f.vertices]
 			if f.use_smooth:
@@ -156,9 +155,9 @@ class joe_frame:
 				jf.normal_index = [normals.get(f.normal)] * 3
 			self.faces.append(jf)
 		# get texture coordinates
-		if len(mesh.uv_textures) != 0:
+		if len(mesh.tessface_uv_textures) != 0:
 			for i, f in enumerate(self.faces):
-				mf = mesh.uv_textures[0].data[i]
+				mf = mesh.tessface_uv_textures[0].data[i]
 				f.texture_index = [texcoords.get((uv[0], uv[1])) for uv in mf.uv[0:3]]
 		self.normals = normals.list
 		self.verts = vertices.list
@@ -213,7 +212,7 @@ class joe_frame:
 		# new mesh
 		mesh = bpy.data.meshes.new(name)
 		mesh.vertices.add(len(self.verts))
-		mesh.faces.add(len(self.faces))
+		mesh.tessfaces.add(len(self.faces))
 		
 		# set vertices
 		for i, v in enumerate(self.verts):
@@ -224,13 +223,13 @@ class joe_frame:
 		
 		# set faces
 		for i, f in enumerate(self.faces):
-			mesh.faces[i].vertices = (f.vertex_index[0], f.vertex_index[1], f.vertex_index[2], 0)
-			mesh.faces[i].use_smooth = True
+			mesh.tessfaces[i].vertices = (f.vertex_index[0], f.vertex_index[1], f.vertex_index[2], 0)
+			mesh.tessfaces[i].use_smooth = True
 		
 		# set texture coordinates
-		mesh.uv_textures.new()
+		mesh.tessface_uv_textures.new()
 		for i, f in enumerate(self.faces):
-			mf = mesh.uv_textures[0].data[i]
+			mf = mesh.tessface_uv_textures[0].data[i]
 			mf.uv1 = self.texcoords[f.texture_index[0]]
 			mf.uv2 = self.texcoords[f.texture_index[1]]
 			mf.uv3 = self.texcoords[f.texture_index[2]]
@@ -348,13 +347,13 @@ class joe_pack:
 				continue
 			if obj.name.startswith('~'):
 				continue
-			if len(obj.data.faces) == 0:
+			if len(obj.data.tessfaces) == 0:
 				print(obj.name + ' not exported. No faces.')
 				continue
-			if len(obj.data.uv_textures) == 0:
+			if len(obj.data.tessface_uv_textures) == 0:
 				print(obj.name + ' not exported. No texture coordinates.')
 				continue
-			if obj.data.uv_textures[0].data[0].image == None:
+			if obj.data.tessface_uv_textures[0].data[0].image == None:
 				print(obj.name + ' not exported. No texture assigned.')
 				continue
 			objname = obj.name
@@ -579,7 +578,7 @@ class trackobject:
 	# set from object
 	def from_obj(self, object):
 		model = object.name
-		texture = path.basename(object.data.uv_textures[0].data[0].image.filepath)
+		texture = path.basename(object.data.tessface_uv_textures[0].data[0].image.filepath)
 		self.values[0] = object.get('model', model)
 		self.values[1] = object.get('texture', texture)
 		self.values[2] = '1' if object in trackobject.is_mipmap else '0'
@@ -628,8 +627,8 @@ class roads:
 		# new mesh
 		mesh = bpy.data.meshes.new(name)
 		mesh.vertices.add(patchnum * 4 + 4)
-		mesh.faces.add(patchnum * 3)
-		mesh.uv_textures.new()
+		mesh.tessfaces.add(patchnum * 3)
+		mesh.tessface_uv_textures.new()
 		# parse road
 		lines = [None] * 16
 		for p in range(patchnum):
@@ -646,10 +645,10 @@ class roads:
 			for n in range(3):
 				i = p * 3 + n
 				vi = p * 4 + n
-				mesh.faces[i].vertices_raw = (vi, vi + 4, vi + 5, vi + 1)
-				mesh.faces[i].use_smooth = True
+				mesh.tessfaces[i].vertices_raw = (vi, vi + 4, vi + 5, vi + 1)
+				mesh.tessfaces[i].use_smooth = True
 				u, v = 1 - n/3.0, float(p)
-				mesh.uv_textures[0].data[i].uv_raw = (u, v, u, v + 1, u - 1/3.0, v + 1, u - 1/3.0, v)
+				mesh.tessface_uv_textures[0].data[i].uv_raw = (u, v, u, v + 1, u - 1/3.0, v + 1, u - 1/3.0, v)
 		# last row
 		for n in range(4):
 			i = patchnum * 4 + n
@@ -663,13 +662,13 @@ class roads:
 
 	@staticmethod
 	def save_road(file, mesh):
-		patchnum = int(len(mesh.faces) / 3)
+		patchnum = int(len(mesh.tessfaces) / 3)
 		road = [None] * 16 * patchnum
-		if len(mesh.uv_textures) == 0 or len(mesh.uv_textures[0].data) == 0:
+		if len(mesh.tessface_uv_textures) == 0 or len(mesh.tessface_uv_textures[0].data) == 0:
 			raise NameError("Road mesh %s has no uv coordinates" % mesh.name)
 		# get first, last patch rows from faces
-		for i, f in enumerate(mesh.faces):
-			tf = mesh.uv_textures[0].data[i]
+		for i, f in enumerate(mesh.tessfaces):
+			tf = mesh.tessface_uv_textures[0].data[i]
 			for n in range(4):
 				pointid = int(tf.uv_raw[2 * n] * 3)
 				patchid = int(tf.uv_raw[2 * n + 1])
@@ -869,7 +868,7 @@ class util:
 	def get_tri_mesh(object):
 		quad = False
 		mesh = object.data
-		for face in mesh.faces:
+		for face in mesh.tessfaces:
 			if len(face.vertices) == 4:
 				quad = True
 				break
@@ -957,11 +956,11 @@ class import_image(bpy.types.Operator, ImportHelper):
 		object = bpy.context.selected_objects[0]
 		if object.type != 'MESH':
 			raise NameError('Selected object must be a mesh!')
-		if len(object.data.faces) == 0:
+		if len(object.data.tessfaces) == 0:
 			raise NameError('Selected object has no faces!')
-		if len(object.data.uv_textures) == 0:
+		if len(object.data.tessface_uv_textures) == 0:
 			raise NameError('Selected object has no texture coordinates!')
-		for mf in object.data.uv_textures[0].data:
+		for mf in object.data.tessface_uv_textures[0].data:
 			mf.image = image
 		return {'FINISHED'}
 
