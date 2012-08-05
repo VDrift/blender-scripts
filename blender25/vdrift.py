@@ -140,6 +140,8 @@ class joe_frame:
 		joe_texcoord.write(self.texcoords, file)
 	
 	def from_mesh(self, obj):
+		if len(obj.data.tessfaces) == 0:
+			obj.data.update(calc_tessface = True)
 		mesh = util.get_tri_mesh(obj)
 		mesh.transform(obj.matrix_world)
 		normals = util.indexed_set()
@@ -227,13 +229,16 @@ class joe_frame:
 			mesh.tessfaces[i].use_smooth = True
 		
 		# set texture coordinates
-		mesh.tessface_uv_textures.new()
-		for i, f in enumerate(self.faces):
-			mf = mesh.tessface_uv_textures[0].data[i]
-			mf.uv1 = self.texcoords[f.texture_index[0]]
-			mf.uv2 = self.texcoords[f.texture_index[1]]
-			mf.uv3 = self.texcoords[f.texture_index[2]]
-			if (image): mf.image = image
+		if self.num_texcoords == 0:
+			print("Warning! Mesh has no texture coordinates.")
+		else:
+			mesh.tessface_uv_textures.new()
+			for i, f in enumerate(self.faces):
+				mf = mesh.tessface_uv_textures[0].data[i]
+				mf.uv1 = self.texcoords[f.texture_index[0]]
+				mf.uv2 = self.texcoords[f.texture_index[1]]
+				mf.uv3 = self.texcoords[f.texture_index[2]]
+				if (image): mf.image = image
 		
 		mesh.validate()
 		mesh.update()
