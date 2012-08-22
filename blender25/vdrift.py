@@ -20,8 +20,9 @@ bl_info = {
 	'name': 'VDrift JOE/JPK format',
 	'description': 'Import-Export to VDrift JOE files (.joe)',
 	'author': 'NaN, port of VDrift blender24 scripts',
-	'version': (0, 8),
-	'blender': (2, 6, 3),
+	'version': (0, 7),
+	'blender': (2, 5, 8),
+	'api': 35622,
 	'location': 'File > Import-Export',
 	'warning': '',
 	'wiki_url': 'http://', 
@@ -34,7 +35,6 @@ from bpy_extras.io_utils import ExportHelper, ImportHelper
 from bpy_extras.image_utils import load_image
 from struct import Struct
 from os import path
-
 
 class joe_vertex:
 	bstruct = Struct('<fff')
@@ -140,15 +140,13 @@ class joe_frame:
 		joe_texcoord.write(self.texcoords, file)
 	
 	def from_mesh(self, obj):
-		if len(obj.data.tessfaces) == 0:
-			obj.data.update(calc_tessface = True)
 		mesh = util.get_tri_mesh(obj)
 		mesh.transform(obj.matrix_world)
 		normals = util.indexed_set()
 		vertices = util.indexed_set()
 		texcoords = util.indexed_set()
 		# get vertices and normals
-		for f in mesh.tessfaces:
+		for f in mesh.faces:
 			jf = joe_face()
 			jf.vertex_index = [vertices.get(mesh.vertices[vi].co) for vi in f.vertices]
 			if f.use_smooth:
@@ -157,9 +155,9 @@ class joe_frame:
 				jf.normal_index = [normals.get(f.normal)] * 3
 			self.faces.append(jf)
 		# get texture coordinates
-		if len(mesh.tessface_uv_textures) != 0:
+		if len(mesh.uv_textures) != 0:
 			for i, f in enumerate(self.faces):
-				mf = mesh.tessface_uv_textures[0].data[i]
+				mf = mesh.uv_textures[0].data[i]
 				f.texture_index = [texcoords.get((uv[0], uv[1])) for uv in mf.uv[0:3]]
 		self.normals = normals.list
 		self.verts = vertices.list
@@ -214,7 +212,7 @@ class joe_frame:
 		# new mesh
 		mesh = bpy.data.meshes.new(name)
 		mesh.vertices.add(len(self.verts))
-		mesh.tessfaces.add(len(self.faces))
+		mesh.faces.add(len(self.faces))
 		
 		# set vertices
 		for i, v in enumerate(self.verts):
@@ -225,27 +223,25 @@ class joe_frame:
 		
 		# set faces
 		for i, f in enumerate(self.faces):
-			mesh.tessfaces[i].vertices = (f.vertex_index[0], f.vertex_index[1], f.vertex_index[2], 0)
-			mesh.tessfaces[i].use_smooth = True
+			mesh.faces[i].vertices = (f.vertex_index[0], f.vertex_index[1], f.vertex_index[2], 0)
+			mesh.faces[i].use_smooth = True
 		
 		# set texture coordinates
-		if self.num_texcoords == 0:
-			print("Warning! Mesh has no texture coordinates.")
-		else:
-			mesh.tessface_uv_textures.new()
-			for i, f in enumerate(self.faces):
-				mf = mesh.tessface_uv_textures[0].data[i]
-				mf.uv1 = self.texcoords[f.texture_index[0]]
-				mf.uv2 = self.texcoords[f.texture_index[1]]
-				mf.uv3 = self.texcoords[f.texture_index[2]]
-				if (image): mf.image = image
+		mesh.uv_textures.new()
+		for i, f in enumerate(self.faces):
+			mf = mesh.uv_textures[0].data[i]
+			mf.uv1 = self.texcoords[f.texture_index[0]]
+			mf.uv2 = self.texcoords[f.texture_index[1]]
+			mf.uv3 = self.texcoords[f.texture_index[2]]
+			if (image):
+				mf.image = image
+				mf.use_image = True
 		
 		mesh.validate()
 		mesh.update()
 		object = bpy.data.objects.new(name, mesh)
 		bpy.context.scene.objects.link(object)
 		return object
-
 
 class joe_obj:
 	__slots__ = 'ident', 'version', 'num_faces', 'num_frames', 'frames'
@@ -315,20 +311,20 @@ class joe_pack:
 		self.surfaces = []
 	
 	@staticmethod
-	def read(filename):
+	def load(filename):
 		# don't change call order
 		jpk = joe_pack()
 		jpk.load_list(filename)
 		jpk.load_images(filename)
-		jpk.load(filename)
+		jpk.load_jpk(filename)
 		return jpk
 	
 	@staticmethod
-	def write(filename, write_list, write_jpk):
+	def save(filename, save_list, save_jpk):
 		jpk = joe_pack().from_mesh()
-		if write_jpk:
-			jpk.save(filename)
-		if write_list:
+		if save_jpk:
+			jpk.save_jpk(filename)
+		if save_list:
 			jpk.save_list(filename)
 		
 	def to_mesh(self):
@@ -352,13 +348,13 @@ class joe_pack:
 				continue
 			if obj.name.startswith('~'):
 				continue
-			if len(obj.data.tessfaces) == 0:
+			if len(obj.data.faces) == 0:
 				print(obj.name + ' not exported. No faces.')
 				continue
-			if len(obj.data.tessface_uv_textures) == 0:
+			if len(obj.data.uv_textures) == 0:
 				print(obj.name + ' not exported. No texture coordinates.')
 				continue
-			if obj.data.tessface_uv_textures[0].data[0].image == None:
+			if obj.data.uv_textures[0].data[0].image == None:
 				print(obj.name + ' not exported. No texture assigned.')
 				continue
 			objname = obj.name
@@ -371,12 +367,12 @@ class joe_pack:
 				objname = objname + '.joe'
 				trackobj.values[0] = objname
 			self.list[objname] = trackobj
-			self.joe[objname] = obj
+			self.joe[objname] = joe_obj().from_mesh(obj)
 			self.maxstrlen = max(self.maxstrlen, len(objname))
 		self.numobjs = len(self.joe)
 		return self
 		
-	def load(self, filename):
+	def load_jpk(self, filename):
 		file = open(filename, 'rb')
 		# header
 		version = file.read(len(joe_pack.versionstr))
@@ -412,7 +408,7 @@ class joe_pack:
 			self.joe[name] = joe
 		file.close()
 	
-	def save(self, filename):
+	def save_jpk(self, filename):
 		try:
 			file = open(filename, 'rb+')
 		except IOError:
@@ -430,9 +426,8 @@ class joe_pack:
 			file.write(name.encode('ascii'))
 		# write data / build fat
 		fat = []
-		for name, obj in self.joe.items():
+		for name, joe in self.joe.items():
 			offset = file.tell()
-			joe = joe_obj().from_mesh(obj)
 			joe.save(file)
 			length = file.tell() - offset
 			fat.append((offset, length, name))
@@ -486,7 +481,6 @@ class joe_pack:
 			if imagename not in self.images:
 				imagepath = path.join(dir, imagename)
 				self.images[imagename] = load_image(imagepath)
-
 
 class trackobject:
 	names = ('model', 'texture', 'mipmap', 'lighting', 'skybox', 'blend',\
@@ -582,10 +576,8 @@ class trackobject:
 	
 	# set from object
 	def from_obj(self, object):
-		model = object.name
-		texture = path.basename(object.data.tessface_uv_textures[0].data[0].image.filepath)
-		self.values[0] = object.get('model', model)
-		self.values[1] = object.get('texture', texture)
+		self.values[0] = object.get('model', object.name)
+		self.values[1] = object.get('texture', object.data.uv_textures[0].data[0].image.name)
 		self.values[2] = '1' if object in trackobject.is_mipmap else '0'
 		self.values[3] = '1' if object in trackobject.is_nolighting else '0'
 		self.values[4] = '1' if object in trackobject.is_skybox else '0'
@@ -602,217 +594,6 @@ class trackobject:
 				self.values[16] = name
 				break
 		return self
-
-
-class roads:
-	@staticmethod
-	def load(path):
-		file = open(path, 'r')
-		roadnum = int(file.readline())
-		file.readline()
-		for i in range(roadnum):
-			roads.load_road(file, 'road.' + str(i))
-
-	@staticmethod
-	def save(path):
-		file = open(path, 'w')
-		meshes = []
-		i = 0
-		while 'road.' + str(i) in bpy.data.meshes:
-			meshes.append(bpy.data.meshes['road.' + str(i)])
-			i = i + 1
-		file.write(str(len(meshes)) + '\n\n')
-		for m in meshes:
-			roads.save_road(file, m)
-		
-	@staticmethod
-	def load_road(file, name):
-		patchnum = int(file.readline())
-		file.readline()
-		# new mesh
-		mesh = bpy.data.meshes.new(name)
-		mesh.vertices.add(patchnum * 4 + 4)
-		mesh.tessfaces.add(patchnum * 3)
-		mesh.tessface_uv_textures.new()
-		# parse road
-		lines = [None] * 16
-		for p in range(patchnum):
-			# road is stored reversed
-			for n in range(15, -1, -1):
-				lines[n] = file.readline()
-			file.readline()
-			# vertices first row, other rows are interpolated on export
-			for n in range(4):
-				i = p * 4 + n
-				xyz = [float(s) for s in lines[n].split()]
-				mesh.vertices[i].co = (xyz[2], xyz[0], xyz[1])
-			# faces
-			for n in range(3):
-				i = p * 3 + n
-				vi = p * 4 + n
-				mesh.tessfaces[i].vertices_raw = (vi, vi + 4, vi + 5, vi + 1)
-				mesh.tessfaces[i].use_smooth = True
-				u, v = 1 - n/3.0, float(p)
-				mesh.tessface_uv_textures[0].data[i].uv_raw = (u, v, u, v + 1, u - 1/3.0, v + 1, u - 1/3.0, v)
-		# last row
-		for n in range(4):
-			i = patchnum * 4 + n
-			xyz = [float(s) for s in lines[n + 12].split()]
-			mesh.vertices[i].co = (xyz[2], xyz[0], xyz[1])
-		# new object
-		mesh.validate()
-		mesh.update()
-		object = bpy.data.objects.new(name, mesh)
-		bpy.context.scene.objects.link(object)
-
-	@staticmethod
-	def save_road(file, mesh):
-		patchnum = int(len(mesh.tessfaces) / 3)
-		road = [None] * 16 * patchnum
-		if len(mesh.tessface_uv_textures) == 0 or len(mesh.tessface_uv_textures[0].data) == 0:
-			raise NameError("Road mesh %s has no uv coordinates" % mesh.name)
-		# get first, last patch rows from faces
-		for i, f in enumerate(mesh.tessfaces):
-			tf = mesh.tessface_uv_textures[0].data[i]
-			for n in range(4):
-				pointid = int(tf.uv_raw[2 * n] * 3)
-				patchid = int(tf.uv_raw[2 * n + 1])
-				id = patchid * 16 + pointid
-				if patchid < patchnum:
-					road[id] = mesh.vertices[f.vertices[n]].co
-				if patchid > 0:
-					road[id - 4] = mesh.vertices[f.vertices[n]].co
-		# calculate middle rows
-		for i in range(patchnum - 1):
-			roads.attach_patches(road, i, i + 1)
-		# closed/open road
-		if (road[0] - road[-1]).length < 1E-3:
-			roads.attach_patches(road, -1, 0)
-		else:
-			roads.set_middlerow(road, 0, 1)
-			roads.set_middlerow(road, -1, 2)
-		# write road
-		file.write(str(patchnum) + '\n\n')
-		for i in range(patchnum):
-			for n in range(3, -1, -1):
-				for m in range(4):
-					p = road[i * 16 + n * 4 + m]
-					file.write('%.4f %.4f %.4f\n' % (p[1], p[2], p[0]))
-			file.write('\n')
-	
-	# p0: first patch index
-	# p1: second patch index
-	@staticmethod
-	def attach_patches(road, p0, p1):
-		r0 = p0 * 16
-		r1 = p1 * 16
-		for n in range(4):
-			i0 = r0 + n
-			i1 = r1 + n
-			slope = (road[i1 + 12] - road[i0]).normalized()
-			len0 = (road[i0 + 12] - road[i0]).length
-			len1 = (road[i1 + 12] - road[i1]).length
-			scale = min(len1, len0) / 3.0 #old: (len1 + len0) / 6.0
-			road[i0 + 8] = road[i0 + 12] - slope * scale
-			road[i1 + 4] = road[i1] + slope * scale
-	
-	# pi: patch index [0, patchnum)
-	# ri: middle row index 1, 2
-	@staticmethod
-	def set_middlerow(road, pi, ri):
-		scale = ri / 3
-		for n in range(4):
-			i = pi * 16 + n
-			road[i + ri * 4] = road[i] + (road[i + 12] - road[i]) * scale
-
-
-class track:
-	@staticmethod
-	def load(path):
-		start_position = {}
-		obj = track.get_info()
-		file = open(path, 'r')
-		for line in file:
-			line = line.rstrip('\n')
-			if not line: continue
-			name, value = line.split(' = ', 1)
-			# generic properties (as strings for now)
-			if name in obj:
-				#if value == 'on' or value == 'yes': value = True
-				#elif value == 'off' or value == 'no': value = False
-				#ob[name] = type(ob[name])(value)
-				obj[name] = value
-			# lap sequences (as strings for now)
-			elif name.startswith('lap sequence '):
-				road, patch, unused = value.split(',', 2)
-				obj[name] = road.split('.', 1)[0] + ':' + patch.split('.', 1)[0]
-			# start positions
-			elif name.startswith('start position '):
-				x, y, z = value.split(',', 2)
-				track.get_box(name).location = (float(z), float(x), float(y))
-			elif name.startswith('start orientation '):
-				rad = 0.0174532925
-				x, y, z = value.split(',', 2)
-				x, y, z = float(x) * rad, float(y) * rad, float(z) * rad
-				name = 'start position ' + name.rsplit(' ', 1)[1]
-				track.get_box(name).rotation_euler = (z, x, y)
-		file.close()
-
-	@staticmethod
-	def save(path):
-		file = open(path, 'w')
-		obj = track.get_info()
-		lap_sequence = []
-		for k, v in obj.items():
-			if k.startswith('lap sequence'):
-				lap_sequence.append((k, v))
-			else:
-				file.write(k + ' = ' + str(v) + '\n')
-		file.write('lap sequences = ' + str(len(lap_sequence)) + '\n')
-		for v in lap_sequence:
-			name = v[0]
-			road, patch = v[1].split(':', 1)
-			file.write(name + ' = ' + road + ',' + patch + ',0\n')
-		n = 0
-		while True:
-			name = 'start position ' + str(n)
-			obj = bpy.data.objects.get(name)
-			if not obj: break
-			x, y, z = obj.location
-			file.write('start position %s = %.4f,%.4f,%.4f\n' % (str(n), y, z, x))
-			deg = 57.2957795
-			x, y, z = obj.rotation_euler
-			x, y, z = x * deg, y * deg, z * deg
-			file.write('start orientation %s = %.2f,%.2f,%.2f\n' % (str(n), y, z, x))
-			n = n + 1
-		file.close()
-
-	@staticmethod
-	def get_info():
-		obj = bpy.data.objects.get('track_info')
-		if not obj:
-			obj = bpy.data.objects.new('track_info', None)
-			obj['cull faces'] = 'on'
-			obj['vertical tracking skyboxes'] = 'no'
-			obj['non-treaded friction coefficient'] = '1.0'
-			obj['treaded friction coefficient'] = '0.9'
-			bpy.context.scene.objects.link(obj)
-		return obj;
-
-	@staticmethod
-	def get_box(name):
-		obj = bpy.data.objects.get(name)
-		if not obj:
-			verts = [(1,-1,-1), (1,-1,1),(-1,-1,1),(-1,-1,-1),(1,1,-1),(1,1,1),(-1,1,1),(-1,1,-1)]
-			edges = [(0,1),(1,2),(2,3),(3,7),(4,7),(5,6),(6,7),(0,3),(4,5),(1,5),(2,6),(0,4)]
-			mesh = bpy.data.meshes.new("cube")
-			mesh.from_pydata(verts, edges, [])
-			obj = bpy.data.objects.new(name, mesh)
-			bpy.context.scene.objects.link(obj)
-			obj.scale = (2.0, 0.9, 0.5)
-			obj.show_axis = True
-		return obj
-
 
 class util:
 	# helper class to filter duplicates
@@ -873,7 +654,7 @@ class util:
 	def get_tri_mesh(object):
 		quad = False
 		mesh = object.data
-		for face in mesh.tessfaces:
+		for face in mesh.faces:
 			if len(face.vertices) == 4:
 				quad = True
 				break
@@ -941,7 +722,6 @@ class import_joe(bpy.types.Operator, ImportHelper):
 			self.report({'INFO'},  filepath + ' imported')
 		return {'FINISHED'}
 
-
 class import_image(bpy.types.Operator, ImportHelper):
 	bl_idname = 'import.image'
 	bl_label = 'Import texture'
@@ -961,14 +741,13 @@ class import_image(bpy.types.Operator, ImportHelper):
 		object = bpy.context.selected_objects[0]
 		if object.type != 'MESH':
 			raise NameError('Selected object must be a mesh!')
-		if len(object.data.tessfaces) == 0:
+		if len(object.data.faces) == 0:
 			raise NameError('Selected object has no faces!')
-		if len(object.data.tessface_uv_textures) == 0:
+		if len(object.data.uv_textures) == 0:
 			raise NameError('Selected object has no texture coordinates!')
-		for mf in object.data.tessface_uv_textures[0].data:
+		for mf in object.data.uv_textures[0].data:
 			mf.image = image
 		return {'FINISHED'}
-
 
 class export_jpk(bpy.types.Operator, ExportHelper):
 	bl_idname = 'export.jpk'
@@ -989,7 +768,7 @@ class export_jpk(bpy.types.Operator, ExportHelper):
 	def execute(self, context):
 		props = self.properties
 		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
-		joe_pack.write(filepath, self.export_list, self.export_jpk)
+		joe_pack.save(filepath, self.export_list, self.export_jpk)
 		return {'FINISHED'}
 		
 	def invoke(self, context, event):
@@ -1008,78 +787,9 @@ class import_jpk(bpy.types.Operator, ImportHelper):
 	def execute(self, context):
 		props = self.properties
 		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
-		jpk = joe_pack.read(filepath)
+		jpk = joe_pack.load(filepath)
 		jpk.to_mesh()
 		return {'FINISHED'}
-
-
-class export_trk(bpy.types.Operator, ExportHelper):
-	bl_idname = 'export.trk'
-	bl_label = 'Export Vdrift roads'
-	filename_ext = '.trk'
-	filter_glob = StringProperty(
-			default='*.trk',
-			options={'HIDDEN'})
-	
-	def execute(self, context):
-		props = self.properties
-		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
-		roads.save(filepath)
-		return {'FINISHED'}
-		
-	def invoke(self, context, event):
-		context.window_manager.fileselect_add(self);
-		return {'RUNNING_MODAL'}
-
-
-class import_trk(bpy.types.Operator, ImportHelper):
-	bl_idname = 'import.trk'
-	bl_label = 'Import VDrift roads'
-	filename_ext = '.trk'
-	filter_glob = StringProperty(
-		default='*.trk',
-		options={'HIDDEN'})
-	
-	def execute(self, context):
-		props = self.properties
-		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
-		roads.load(filepath)
-		return {'FINISHED'}
-
-
-class export_track(bpy.types.Operator, ExportHelper):
-	bl_idname = 'export.track'
-	bl_label = 'Export Vdrift track'
-	filename_ext = '.txt'
-	filter_glob = StringProperty(
-			default='track.txt',
-			options={'HIDDEN'})
-	
-	def execute(self, context):
-		props = self.properties
-		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
-		track.save(filepath)
-		return {'FINISHED'}
-		
-	def invoke(self, context, event):
-		context.window_manager.fileselect_add(self);
-		return {'RUNNING_MODAL'}
-
-
-class import_track(bpy.types.Operator, ImportHelper):
-	bl_idname = 'import.track'
-	bl_label = 'Import VDrift track'
-	filename_ext = '.txt'
-	filter_glob = StringProperty(
-		default='track.txt',
-		options={'HIDDEN'})
-	
-	def execute(self, context):
-		props = self.properties
-		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
-		track.load(filepath)
-		return {'FINISHED'}
-
 
 def menu_export_joe(self, context):
 	self.layout.operator(export_joe.bl_idname, text = 'VDrift JOE (.joe)')
@@ -1088,10 +798,8 @@ def menu_export_joe(self, context):
 def menu_import_joe(self, context):
 	self.layout.operator(import_joe.bl_idname, text = 'VDrift JOE (.joe)')
 
-
 def menu_import_image(self, context):
-	self.layout.operator(import_image.bl_idname, text = 'VDrift Texture (.png)')
-
+	self.layout.operator(import_image.bl_idname, text = 'VDrift texture (.png)')
 
 def menu_export_jpk(self, context):
 	self.layout.operator(export_jpk.bl_idname, text = 'VDrift JPK (.jpk)')
@@ -1101,22 +809,6 @@ def menu_import_jpk(self, context):
 	self.layout.operator(import_jpk.bl_idname, text = 'VDrift JPK (.jpk)')
 
 
-def menu_export_trk(self, context):
-	self.layout.operator(export_trk.bl_idname, text = 'VDrift Roads (.trk)')
-
-
-def menu_import_trk(self, context):
-	self.layout.operator(import_trk.bl_idname, text = 'VDrift Roads (.trk)')
-
-
-def menu_export_track(self, context):
-	self.layout.operator(export_track.bl_idname, text = 'VDrift Track Info (track.txt)')
-
-
-def menu_import_track(self, context):
-	self.layout.operator(import_track.bl_idname, text = 'VDrift Track Info (track.txt)')
-
-
 def register():
 	bpy.utils.register_module(__name__)
 	bpy.types.INFO_MT_file_export.append(menu_export_joe)
@@ -1124,10 +816,6 @@ def register():
 	bpy.types.INFO_MT_file_import.append(menu_import_image)
 	bpy.types.INFO_MT_file_export.append(menu_export_jpk)
 	bpy.types.INFO_MT_file_import.append(menu_import_jpk)
-	bpy.types.INFO_MT_file_export.append(menu_export_trk)
-	bpy.types.INFO_MT_file_import.append(menu_import_trk)
-	bpy.types.INFO_MT_file_export.append(menu_export_track)
-	bpy.types.INFO_MT_file_import.append(menu_import_track)
 
 
 def unregister():
@@ -1137,10 +825,6 @@ def unregister():
 	bpy.types.INFO_MT_file_import.remove(menu_import_image)
 	bpy.types.INFO_MT_file_export.remove(menu_export_jpk)
 	bpy.types.INFO_MT_file_import.remove(menu_import_jpk)
-	bpy.types.INFO_MT_file_export.remove(menu_export_trk)
-	bpy.types.INFO_MT_file_import.remove(menu_import_trk)
-	bpy.types.INFO_MT_file_export.remove(menu_export_track)
-	bpy.types.INFO_MT_file_import.remove(menu_import_track)
 
 
 if __name__ == '__main__':
