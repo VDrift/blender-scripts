@@ -353,8 +353,11 @@ class joe_pack:
 			if obj.name.startswith('~'):
 				continue
 			if len(obj.data.tessfaces) == 0:
-				print(obj.name + ' not exported. No faces.')
-				continue
+				# enforce tessfaces
+				obj.data.update(calc_tessface = True)
+				if len(obj.data.tessfaces) == 0:
+					print(obj.name + ' not exported. No faces.')
+					continue
 			if len(obj.data.tessface_uv_textures) == 0:
 				print(obj.name + ' not exported. No texture coordinates.')
 				continue
