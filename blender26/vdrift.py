@@ -670,6 +670,8 @@ class roads:
 
 	@staticmethod
 	def save_road(file, mesh):
+		if len(mesh.tessfaces) == 0:
+			mesh.update(calc_tessface = True)
 		patchnum = int(len(mesh.tessfaces) / 3)
 		road = [None] * 16 * patchnum
 		if len(mesh.tessface_uv_textures) == 0 or len(mesh.tessface_uv_textures[0].data) == 0:
