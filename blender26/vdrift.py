@@ -286,6 +286,8 @@ class joe_obj:
 			
 	def to_mesh(self, name, image, num_frames=1):
 		frames = []
+		if name.endswith('.joe'):
+			name = name[:-4]
 		for i in range(num_frames):
 			bpy.context.scene.frame_set(i)
 			frames.append(self.frames[i].to_mesh(name, image))
