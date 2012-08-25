@@ -20,7 +20,7 @@ bl_info = {
 	'name': 'VDrift JOE/JPK format',
 	'description': 'Import-Export to VDrift JOE files (.joe)',
 	'author': 'NaN, port of VDrift blender24 scripts',
-	'version': (0, 8),
+	'version': (0, 9),
 	'blender': (2, 6, 3),
 	'location': 'File > Import-Export',
 	'warning': '',
@@ -34,7 +34,7 @@ from bpy_extras.io_utils import ExportHelper, ImportHelper
 from bpy_extras.image_utils import load_image
 from struct import Struct
 from os import path
-
+from mathutils import Vector
 
 class joe_vertex:
 	bstruct = Struct('<fff')
@@ -140,27 +140,44 @@ class joe_frame:
 		joe_texcoord.write(self.texcoords, file)
 	
 	def from_mesh(self, obj):
-		if len(obj.data.tessfaces) == 0:
-			obj.data.update(calc_tessface = True)
-		mesh = util.get_tri_mesh(obj)
+		mesh = obj.data.copy()
 		mesh.transform(obj.matrix_world)
+		if not mesh.tessfaces:
+			mesh.calc_tessface()
 		normals = util.indexed_set()
 		vertices = util.indexed_set()
 		texcoords = util.indexed_set()
 		# get vertices and normals
-		for f in mesh.tessfaces:
+		mvertices = mesh.vertices
+		mtexcoords = mesh.tessface_uv_textures[0].data
+		for fi, f in enumerate(mesh.tessfaces):
+			uv = mtexcoords[fi].uv_raw
+			if f.vertices_raw[3] != 0:
+				# split quad in two tris
+				d0 = (Vector(mvertices[2].co) - Vector(mvertices[0].co)).length_squared
+				d1 = (Vector(mvertices[3].co) - Vector(mvertices[1].co)).length_squared
+				if d0 < d1:
+					vi1, vi2 = (0, 1, 2), (2, 3, 0)
+				else:
+					vi1, vi2 = (1, 2, 3), (3, 0, 1)
+				jf = joe_face()
+				jf.vertex_index = [vertices.get(mvertices[f.vertices_raw[i]].co) for i in vi2]
+				if f.use_smooth:
+					jf.normal_index = [normals.get(mvertices[f.vertices_raw[i]].normal) for i in vi2]
+				else:
+					jf.normal_index = [normals.get(f.normal)] * 3
+				jf.texture_index = [texcoords.get((uv[i * 2], uv[i * 2 + 1])) for i in vi2]
+				self.faces.append(jf)
+			else:
+				vi1 = (0, 1, 2)
 			jf = joe_face()
-			jf.vertex_index = [vertices.get(mesh.vertices[vi].co) for vi in f.vertices]
+			jf.vertex_index = [vertices.get(mvertices[f.vertices_raw[i]].co) for i in vi1]
 			if f.use_smooth:
-				jf.normal_index = [normals.get(mesh.vertices[vi].normal) for vi in f.vertices]
+				jf.normal_index = [normals.get(mvertices[f.vertices_raw[i]].normal) for i in vi1]
 			else:
 				jf.normal_index = [normals.get(f.normal)] * 3
+			jf.texture_index = [texcoords.get((uv[i * 2], uv[i * 2 + 1])) for i in vi1]
 			self.faces.append(jf)
-		# get texture coordinates
-		if len(mesh.tessface_uv_textures) != 0:
-			for i, f in enumerate(self.faces):
-				mf = mesh.tessface_uv_textures[0].data[i]
-				f.texture_index = [texcoords.get((uv[0], uv[1])) for uv in mf.uv[0:3]]
 		self.normals = normals.list
 		self.verts = vertices.list
 		self.texcoords = texcoords.list
@@ -842,53 +859,6 @@ class util:
 	@staticmethod
 	def fillz(str, strlen):
 		return str + chr(0)*(strlen - len(str))
-
-	@staticmethod
-	def delete_object(object):
-		bpy.context.scene.objects.unlink(object)
-		bpy.data.objects.remove(object)
-
-	@staticmethod
-	def duplicate_object(object, name):
-		# save current selection
-		selected_objects = bpy.context.selected_objects[:]
-		active_object = bpy.context.active_object
-		bpy.ops.object.select_all(action = 'DESELECT')
-		
-		# copy object
-		object.select = True
-		bpy.ops.object.duplicate()
-		object_duplicate = bpy.context.selected_objects[0]
-		object_duplicate.name = name
-		
-		# reset selection
-		bpy.context.scene.objects.active = active_object
-		for obj in selected_objects: obj.select = True
-		return object_duplicate
-		
-	@staticmethod
-	def convert_to_tris(object):
-		mesh = object.data
-		bpy.context.scene.objects.active = object
-		bpy.ops.object.mode_set(mode = 'EDIT', toggle = False)
-		bpy.ops.mesh.select_all(action = 'SELECT')
-		bpy.ops.mesh.quads_convert_to_tris()
-		bpy.ops.object.mode_set(mode = 'OBJECT', toggle = False)
-		return mesh
-
-	@staticmethod
-	def get_tri_mesh(object):
-		quad = False
-		mesh = object.data
-		for face in mesh.tessfaces:
-			if len(face.vertices) == 4:
-				quad = True
-				break
-		if quad:
-			object = util.duplicate_object(object, '~joetmp')
-			mesh = util.convert_to_tris(object)
-			util.delete_object(object)
-		return mesh
 
 
 class export_joe(bpy.types.Operator, ExportHelper):
