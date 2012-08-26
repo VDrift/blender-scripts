@@ -371,9 +371,8 @@ class joe_pack:
 				continue
 			if obj.name.startswith('~'):
 				continue
-			if len(obj.data.tessfaces) == 0:
-				# enforce tessfaces
-				obj.data.update(calc_tessface = True)
+			if not obj.data.tessfaces:
+				obj.data.calc_tessface()
 				if len(obj.data.tessfaces) == 0:
 					print(obj.name + ' not exported. No faces.')
 					continue
@@ -526,6 +525,11 @@ class trackobject:
 			grp = bpy.data.groups.get(name)
 			if grp == None:
 				grp = bpy.data.groups.new(name)
+				# need to link an object to group to make it visible
+				obj = bpy.data.objects.get('0')
+				if not obj:
+					obj = bpy.data.objects.new('0', None)
+				grp.objects.link(obj)
 			trackobject.grp[name] = grp.objects
 	
 	@staticmethod
@@ -683,15 +687,17 @@ class roads:
 			mesh.vertices[i].co = (xyz[2], xyz[0], xyz[1])
 		# new object
 		mesh.validate()
-		mesh.update()
+		mesh.update(calc_tessface = True)
 		object = bpy.data.objects.new(name, mesh)
 		bpy.context.scene.objects.link(object)
 
 	@staticmethod
 	def save_road(file, mesh):
-		if len(mesh.tessfaces) == 0:
-			mesh.update(calc_tessface = True)
-		patchnum = int(len(mesh.tessfaces) / 3)
+		if not mesh.tessfaces:
+			mesh.calc_tessface()
+		patchnum = int(len(mesh.vertices) / 4 - 1)
+		#print('patches from facenum ' + str(len(mesh.tessfaces) / 3))
+		#print('patches from vertnum ' + str(patchnum))
 		road = [None] * 16 * patchnum
 		if len(mesh.tessface_uv_textures) == 0 or len(mesh.tessface_uv_textures[0].data) == 0:
 			raise NameError("Road mesh %s has no uv coordinates" % mesh.name)
@@ -699,13 +705,19 @@ class roads:
 		for i, f in enumerate(mesh.tessfaces):
 			tf = mesh.tessface_uv_textures[0].data[i]
 			for n in range(4):
-				pointid = int(tf.uv_raw[2 * n] * 3)
-				patchid = int(tf.uv_raw[2 * n + 1])
+				pointid = int(round(tf.uv_raw[2 * n] * 3))
+				patchid = int(round(tf.uv_raw[2 * n + 1]))
 				id = patchid * 16 + pointid
 				if patchid < patchnum:
 					road[id] = mesh.vertices[f.vertices[n]].co
 				if patchid > 0:
 					road[id - 4] = mesh.vertices[f.vertices[n]].co
+		# debug
+		#for i, p in enumerate(road):
+		#	if p:
+		#		file.write(str(i) + ' %.4f %.4f %.4f\n' % (p[1], p[2], p[0]))
+		#	else:
+		#		file.write(str(i) + '\n')
 		# calculate middle rows
 		for i in range(patchnum - 1):
 			roads.attach_patches(road, i, i + 1)
@@ -938,6 +950,8 @@ class import_image(bpy.types.Operator, ImportHelper):
 		object = bpy.context.selected_objects[0]
 		if object.type != 'MESH':
 			raise NameError('Selected object must be a mesh!')
+		if len(object.data.tessfaces) == 0:
+			object.data.calc_tessface()
 		if len(object.data.tessfaces) == 0:
 			raise NameError('Selected object has no faces!')
 		if len(object.data.tessface_uv_textures) == 0:
