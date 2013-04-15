@@ -17,8 +17,8 @@
 # ***** END GPL LICENCE BLOCK *****
 
 bl_info = {
-	'name': 'VDrift JOE/JPK format',
-	'description': 'Import-Export to VDrift JOE files (.joe)',
+	'name': 'VDrift tools',
+	'description': 'Import-Export to VDrift track files',
 	'author': 'NaN, port of VDrift blender24 scripts',
 	'version': (0, 9),
 	'blender': (2, 6, 3),
@@ -339,8 +339,12 @@ class joe_pack:
 		jpk = joe_pack()
 		jpk.load_list(filename)
 		jpk.load_images(filename)
-		jpk.load(filename)
+		try:
+			jpk.load(filename)
+		except:
+			jpk.load_joes(filename)
 		return jpk
+
 	
 	@staticmethod
 	def write(filename, write_list, write_jpk):
@@ -396,11 +400,22 @@ class joe_pack:
 			self.maxstrlen = max(self.maxstrlen, len(objname))
 		self.numobjs = len(self.joe)
 		return self
-		
+
+	# fallback if no jpk	
+	def load_joes(self, filename):
+		dir = path.dirname(filename)
+		for name in self.list:
+			joe_path = path.join(dir, name)
+			file = open(joe_path, 'rb')
+			joe = joe_obj().load(file)
+			self.joe[name] = joe
+	
 	def load(self, filename):
 		file = open(filename, 'rb')
 		# header
 		version = file.read(len(joe_pack.versionstr))
+		if version != joe_pack.versionstr:
+			raise Exception("Unknown *.jpk file version!")
 		data = file.read(joe_pack.bstruct.size)
 		v = joe_pack.bstruct.unpack(data)
 		self.numobjs = v[0]
@@ -477,7 +492,7 @@ class joe_pack:
 		# read objects
 		line = list_file.readline()
 		while line != '':
-			if '.joe' in line:
+			if not line.startswith('#') and '.joe' in line:
 				object = trackobject()
 				name = line.strip()
 				line = object.read(name, list_file)
@@ -1004,6 +1019,22 @@ class import_jpk(bpy.types.Operator, ImportHelper):
 		return {'FINISHED'}
 
 
+class import_joe_list(bpy.types.Operator, ImportHelper):
+	bl_idname = 'import.list'
+	bl_label = 'Import VDrift track objects'
+	filename_ext = '.txt'
+	filter_glob = StringProperty(
+		default='*.txt',
+		options={'HIDDEN'})
+	
+	def execute(self, context):
+		props = self.properties
+		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
+		jpk = joe_pack.read(filepath)
+		jpk.to_mesh()
+		return {'FINISHED'}
+
+		
 class export_trk(bpy.types.Operator, ExportHelper):
 	bl_idname = 'export.trk'
 	bl_label = 'Export Vdrift roads'
@@ -1092,6 +1123,10 @@ def menu_import_jpk(self, context):
 	self.layout.operator(import_jpk.bl_idname, text = 'VDrift JPK (.jpk)')
 
 
+def menu_import_joe_list(self, context):
+	self.layout.operator(import_joe_list.bl_idname, text = 'VDrift Track Objects (list.txt)')
+
+
 def menu_export_trk(self, context):
 	self.layout.operator(export_trk.bl_idname, text = 'VDrift Roads (.trk)')
 
@@ -1119,7 +1154,7 @@ def register():
 	bpy.types.INFO_MT_file_import.append(menu_import_trk)
 	bpy.types.INFO_MT_file_export.append(menu_export_track)
 	bpy.types.INFO_MT_file_import.append(menu_import_track)
-
+	bpy.types.INFO_MT_file_import.append(menu_import_joe_list)
 
 def unregister():
 	bpy.utils.unregister_module(__name__)
@@ -1132,7 +1167,7 @@ def unregister():
 	bpy.types.INFO_MT_file_import.remove(menu_import_trk)
 	bpy.types.INFO_MT_file_export.remove(menu_export_track)
 	bpy.types.INFO_MT_file_import.remove(menu_import_track)
-
+	bpy.types.INFO_MT_file_import.append(menu_import_joe_list)
 
 if __name__ == '__main__':
 	register()
