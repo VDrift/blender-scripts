@@ -322,7 +322,7 @@ class joe_obj:
 
 
 class joe_pack:
-	versionstr = 'JPK01.00'
+	version = b'JPK01.00'
 	bstruct = Struct('<2i')
 	
 	def __init__(self):
@@ -413,9 +413,9 @@ class joe_pack:
 	def load(self, filename):
 		file = open(filename, 'rb')
 		# header
-		version = file.read(len(joe_pack.versionstr))
-		if version != joe_pack.versionstr:
-			raise Exception("Unknown *.jpk file version!")
+		version = file.read(len(joe_pack.version))
+		if version != joe_pack.version:
+			raise Exception(filename + ' unknown jpk version: ' + version + ' expected: ' + joe_pack.version)
 		data = file.read(joe_pack.bstruct.size)
 		v = joe_pack.bstruct.unpack(data)
 		self.numobjs = v[0]
