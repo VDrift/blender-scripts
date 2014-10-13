@@ -415,7 +415,7 @@ class joe_pack:
 		# header
 		version = file.read(len(joe_pack.version))
 		if version != joe_pack.version:
-			raise Exception(filename + ' unknown jpk version: ' + version + ' expected: ' + joe_pack.version)
+			raise Exception(filename + ' unknown jpk version: ' + str(version) + ' expected: ' + str(joe_pack.version))
 		data = file.read(joe_pack.bstruct.size)
 		v = joe_pack.bstruct.unpack(data)
 		self.numobjs = v[0]
@@ -454,7 +454,7 @@ class joe_pack:
 		except IOError:
 			file = open(filename, 'wb')
 		# header
-		file.write(self.versionstr.encode('ascii'))
+		file.write(self.version)
 		data = joe_pack.bstruct.pack(self.numobjs, self.maxstrlen)
 		file.write(data)
 		# allocate fat
