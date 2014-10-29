@@ -669,8 +669,13 @@ class roads:
 		file = open(path, 'w')
 		meshes = []
 		i = 0
-		while 'road.' + str(i) in bpy.data.meshes:
-			meshes.append(bpy.data.meshes['road.' + str(i)])
+		while 'road.' + str(i) in bpy.data.objects:
+			obj = bpy.data.objects['road.' + str(i)]
+			mesh = obj.data
+			if obj.matrix_world != Matrix.Identity(4):
+				mesh = obj.data.copy()
+				mesh.transform(obj.matrix_world)
+			meshes.append(mesh)
 			i = i + 1
 		file.write(str(len(meshes)) + '\n\n')
 		for m in meshes:
