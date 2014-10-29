@@ -380,14 +380,23 @@ class joe_pack:
 				if len(obj.data.tessfaces) == 0:
 					print(obj.name + ' not exported. No faces.')
 					continue
-			if len(obj.data.tessface_uv_textures) == 0:
+			if not obj.data.tessface_uv_textures:
 				print(obj.name + ' not exported. No texture coordinates.')
 				continue
-			if obj.data.tessface_uv_textures[0].data[0].image == None:
-				print(obj.name + ' not exported. No texture assigned.')
+			image = None
+			if obj.data.tessface_uv_textures[0].data[0].image:
+				image = obj.data.tessface_uv_textures[0].data[0].image
+			else:
+				for mat_slot in obj.material_slots:
+					for mtex_slot in mat_slot.material.texture_slots:
+						if mtex_slot and hasattr(mtex_slot.texture, 'image'):
+							image =  mtex_slot.texture.image
+							break
+			if not image:
+				print(obj.name + ' not exported. No texture linked.')
 				continue
 			objname = obj.name
-			trackobj = trackobject().from_obj(obj)
+			trackobj = trackobject().from_obj(obj, path.basename(image.filepath))
 			# override obj name
 			if len(trackobj.values[0]):
 				objname = trackobj.values[0]
@@ -622,9 +631,8 @@ class trackobject:
 		return self
 	
 	# set from object
-	def from_obj(self, object):
+	def from_obj(self, object, texture):
 		model = object.name
-		texture = path.basename(object.data.tessface_uv_textures[0].data[0].image.filepath)
 		self.values[0] = object.get('model', model)
 		self.values[1] = object.get('texture', texture)
 		self.values[2] = '1' if object in trackobject.is_mipmap else '0'
