@@ -34,7 +34,7 @@ from bpy_extras.io_utils import ExportHelper, ImportHelper
 from bpy_extras.image_utils import load_image
 from struct import Struct
 from os import path
-from mathutils import Vector
+from mathutils import Vector, Matrix
 
 class joe_vertex:
 	bstruct = Struct('<fff')
@@ -140,8 +140,10 @@ class joe_frame:
 		joe_texcoord.write(self.texcoords, file)
 	
 	def from_mesh(self, obj):
-		mesh = obj.data.copy()
-		mesh.transform(obj.matrix_world)
+		mesh = obj.data
+		if obj.matrix_world != Matrix.Identity(4):
+			mesh = obj.data.copy()
+			mesh.transform(obj.matrix_world)
 		if not mesh.tessfaces:
 			mesh.calc_tessface()
 		normals = util.indexed_set()
