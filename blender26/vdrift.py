@@ -24,7 +24,7 @@ bl_info = {
 	'blender': (2, 6, 3),
 	'location': 'File > Import-Export',
 	'warning': '',
-	'wiki_url': 'http://', 
+	'wiki_url': 'http://',
 	'tracker_url': 'http://',
 	'category': 'Import-Export'}
 
@@ -38,7 +38,7 @@ from mathutils import Vector, Matrix
 
 class joe_vertex:
 	bstruct = Struct('<fff')
-	
+
 	# read list of 3-tuples
 	@staticmethod
 	def read(num, file):
@@ -48,7 +48,7 @@ class joe_vertex:
 			v = joe_vertex.bstruct.unpack(data)
 			values.append(v)
 		return values
-	
+
 	# write a list of 3-tuples
 	@staticmethod
 	def write(values, file):
@@ -59,7 +59,7 @@ class joe_vertex:
 
 class joe_texcoord:
 	bstruct = Struct('<ff')
-	
+
 	# read a list of 2-tuples
 	@staticmethod
 	def read(num, file):
@@ -69,7 +69,7 @@ class joe_texcoord:
 			v = joe_texcoord.bstruct.unpack(data)
 			values.append((v[0], 1 - v[1]))
 		return values
-	
+
 	# write a list of 2-tuples
 	@staticmethod
 	def write(values, file):
@@ -81,12 +81,12 @@ class joe_texcoord:
 class joe_face:
 	__slots__ = 'vertex_index', 'normal_index', 'texture_index'
 	bstruct = Struct('<3h3h3h')
-   
+
 	def __init__(self):
 		self.vertex_index = [0, 0, 0]
 		self.normal_index = [0, 0, 0]
 		self.texture_index = [0, 0, 0]
-	
+
 	def load (self, file):
 		data = file.read(joe_face.bstruct.size)
 		v = joe_face.bstruct.unpack(data)
@@ -94,7 +94,7 @@ class joe_face:
 		self.normal_index = [v[3], v[4], v[5]]
 		self.texture_index = [v[6], v[7], v[8]]
 		return self
-	
+
 	def save(self, file):
 		data = joe_face.bstruct.pack(
 			self.vertex_index[0],self.vertex_index[1],self.vertex_index[2],
@@ -129,7 +129,7 @@ class joe_frame:
 		self.normals = joe_vertex.read(self.num_normals, file)
 		self.texcoords = joe_texcoord.read(self.num_texcoords, file)
 		return self
-	
+
 	def save(self, file):
 		# header
 		data = joe_frame.bstruct.pack(self.num_vertices, self.num_texcoords, self.num_normals)
@@ -138,7 +138,7 @@ class joe_frame:
 		joe_vertex.write(self.verts, file)
 		joe_vertex.write(self.normals, file)
 		joe_texcoord.write(self.texcoords, file)
-	
+
 	def from_mesh(self, obj):
 		mesh = obj.data
 		if obj.matrix_world != Matrix.Identity(4):
@@ -212,8 +212,8 @@ class joe_frame:
 				else:
 					f.vertex_index[i] = face_vert[vn]
 		self.verts = verts
-	
-	# in blender 2.5 the last vertex index shall not be 0 
+
+	# in blender 2.5 the last vertex index shall not be 0
 	def swizzle_face_vertices(self):
 		for f in self.faces:
 			vi = f.vertex_index
@@ -223,30 +223,30 @@ class joe_frame:
 				vi[0], vi[1], vi[2] = vi[2], vi[0], vi[1]
 				ni[0], ni[1], ni[2] = ni[2], ni[0], ni[1]
 				ti[0], ti[1], ti[2] = ti[2], ti[0], ti[1]
-	
+
 	def to_mesh(self, name, image):
 		# cleanup joe
 		self.remove_degenerate_faces()
 		self.swizzle_face_vertices()
 		self.duplicate_verts_with_multiple_normals()
-		
+
 		# new mesh
 		mesh = bpy.data.meshes.new(name)
 		mesh.vertices.add(len(self.verts))
 		mesh.tessfaces.add(len(self.faces))
-		
+
 		# set vertices
 		for i, v in enumerate(self.verts):
 			mesh.vertices[i].co = v
 		for f in self.faces:
 			for i in range(3):
 				mesh.vertices[f.vertex_index[i]].normal = self.normals[f.normal_index[i]]
-		
+
 		# set faces
 		for i, f in enumerate(self.faces):
 			mesh.tessfaces[i].vertices = (f.vertex_index[0], f.vertex_index[1], f.vertex_index[2], 0)
 			mesh.tessfaces[i].use_smooth = True
-		
+
 		# set texture coordinates
 		if self.num_texcoords == 0:
 			print("Warning! Mesh has no texture coordinates.")
@@ -258,7 +258,7 @@ class joe_frame:
 				mf.uv2 = self.texcoords[f.texture_index[1]]
 				mf.uv3 = self.texcoords[f.texture_index[2]]
 				if (image): mf.image = image
-		
+
 		mesh.validate()
 		mesh.update()
 		object = bpy.data.objects.new(name, mesh)
@@ -269,14 +269,14 @@ class joe_frame:
 class joe_obj:
 	__slots__ = 'ident', 'version', 'num_faces', 'num_frames', 'frames'
 	bstruct = Struct('<4i')
-	
+
 	def __init__(self):
 		self.ident = 844121161
 		self.version = 3
 		self.num_faces = 0
 		self.num_frames = 0
 		self.frames = []
-   
+
 	def load(self, file):
 		# header
 		data = file.read(joe_obj.bstruct.size)
@@ -292,7 +292,7 @@ class joe_obj:
 				self.frames[i].faces.append(joe_face().load(file))
 			self.frames[i].load(file)
 		return self
-	
+
 	def save(self, file):
 		# header
 		data = joe_obj.bstruct.pack(self.ident, self.version, self.num_faces, self.num_frames)
@@ -302,7 +302,7 @@ class joe_obj:
 			for j in range(self.num_faces):
 				self.frames[i].faces[j].save(file)
 			self.frames[i].save(file)
-			
+
 	def to_mesh(self, name, image, num_frames=1):
 		frames = []
 		if name.endswith('.joe'):
@@ -311,7 +311,7 @@ class joe_obj:
 			bpy.context.scene.frame_set(i)
 			frames.append(self.frames[i].to_mesh(name, image))
 		return frames[0]
-		
+
 	def from_mesh(self, mesh_obj, num_frames=1):
 		for i in range(num_frames):
 			bpy.context.scene.frame_set(i)
@@ -326,7 +326,7 @@ class joe_obj:
 class joe_pack:
 	version = b'JPK01.00'
 	bstruct = Struct('<2i')
-	
+
 	def __init__(self):
 		self.numobjs = 0
 		self.maxstrlen = 0
@@ -334,7 +334,7 @@ class joe_pack:
 		self.list = {}
 		self.images = {}
 		self.surfaces = []
-	
+
 	@staticmethod
 	def read(filename):
 		# don't change call order
@@ -347,7 +347,7 @@ class joe_pack:
 			jpk.load_joes(filename)
 		return jpk
 
-	
+
 	@staticmethod
 	def write(filename, write_list, write_jpk):
 		jpk = joe_pack().from_mesh()
@@ -355,7 +355,7 @@ class joe_pack:
 			jpk.save(filename)
 		if write_list:
 			jpk.save_list(filename)
-		
+
 	def to_mesh(self):
 		trackobject.create_groups()
 		for name, joe in self.joe.items():
@@ -368,7 +368,7 @@ class joe_pack:
 				trackobj.to_obj(obj)
 			else:
 				print(name + ' not imported. Not in list.txt.')
-		
+
 	def from_mesh(self):
 		objlist = bpy.context.scene.objects
 		trackobject.set_groups()
@@ -412,7 +412,7 @@ class joe_pack:
 		self.numobjs = len(self.joe)
 		return self
 
-	# fallback if no jpk	
+	# fallback if no jpk
 	def load_joes(self, filename):
 		dir = path.dirname(filename)
 		for name in self.list:
@@ -420,7 +420,7 @@ class joe_pack:
 			file = open(joe_path, 'rb')
 			joe = joe_obj().load(file)
 			self.joe[name] = joe
-	
+
 	def load(self, filename):
 		file = open(filename, 'rb')
 		# header
@@ -458,7 +458,7 @@ class joe_pack:
 			joe = joe_obj().load(file)
 			self.joe[name] = joe
 		file.close()
-	
+
 	def save(self, filename):
 		try:
 			file = open(filename, 'rb+')
@@ -491,7 +491,7 @@ class joe_pack:
 			name = util.fillz(name, self.maxstrlen)
 			file.write(name.encode('ascii'))
 		file.close()
-		
+
 	def load_list(self, filename):
 		dir = path.dirname(filename)
 		list_path = path.join(dir, 'list.txt')
@@ -513,7 +513,7 @@ class joe_pack:
 		if len(self.list) == 0:
 			print('Failed to load list.txt.')
 		list_file.close()
-		
+
 	def save_list(self, filename):
 		dir = path.dirname(filename)
 		list_path = path.join(dir, 'list.txt')
@@ -525,7 +525,7 @@ class joe_pack:
 			object.write(file)
 			i = i + 1
 		file.close()
-		
+
 	def load_images(self, filename):
 		dir = path.dirname(filename)
 		for name, object in self.list.items():
@@ -541,8 +541,8 @@ class trackobject:
 			'non treaded', 'treaded', 'roll resistance', 'roll drag',\
 			'shadow', 'clamp', 'surface')
 	namemap = dict(zip(names, range(17)))
-	
-	@staticmethod	
+
+	@staticmethod
 	def create_groups():
 		trackobject.grp_surf = []
 		trackobject.grp = {}
@@ -557,7 +557,7 @@ class trackobject:
 					obj = bpy.data.objects.new('0', None)
 				grp.objects.link(obj)
 			trackobject.grp[name] = grp.objects
-	
+
 	@staticmethod
 	def set_groups():
 		trackobject.create_groups()
@@ -583,13 +583,13 @@ class trackobject:
 				trackobject.is_clampv = set(grp.objects)
 			elif grp.name.startswith('surface'):
 				trackobject.is_surf.append((grp.name.split('-')[-1], set(grp.objects)))
-	
+
 	def __init__(self):
 		self.values = ['none', 'none', '1', '0', '0', '0',\
 						'1.0', '0.0', '0', '0',\
 						'1.0', '0.9', '1.0', '0.0',\
 						'0', '0', '0']
-	
+
 	def read(self, name, list_file):
 		i = 0
 		self.values[i] = name
@@ -603,12 +603,12 @@ class trackobject:
 				i = i + 1
 				self.values[i] = line.strip()
 		return line
-	
+
 	def write(self, list_file):
 		for v in self.values:
 			list_file.write(v + '\n')
 		list_file.write('\n')
-	
+
 	def to_obj(self, object):
 		object['model'] = self.values[0]
 		object['texture'] = self.values[1]
@@ -631,7 +631,7 @@ class trackobject:
 			trackobject.grp_surf.append(grp.objects)
 		trackobject.grp_surf[surfid].link(object)
 		return self
-	
+
 	# set from object
 	def from_obj(self, object, texture):
 		model = object.name
@@ -680,7 +680,7 @@ class roads:
 		file.write(str(len(meshes)) + '\n\n')
 		for m in meshes:
 			roads.save_road(file, m)
-		
+
 	@staticmethod
 	def load_road(file, name):
 		patchnum = int(file.readline())
@@ -765,7 +765,7 @@ class roads:
 					p = road[i * 16 + n * 4 + m]
 					file.write('%.4f %.4f %.4f\n' % (p[1], p[2], p[0]))
 			file.write('\n')
-	
+
 	# p0: first patch index
 	# p1: second patch index
 	@staticmethod
@@ -781,7 +781,7 @@ class roads:
 			scale = min(len1, len0) / 3.0 #old: (len1 + len0) / 6.0
 			road[i0 + 8] = road[i0 + 12] - slope * scale
 			road[i1 + 4] = road[i1] + slope * scale
-	
+
 	# pi: patch index [0, patchnum)
 	# ri: middle row index 1, 2
 	@staticmethod
@@ -910,13 +910,13 @@ class export_joe(bpy.types.Operator, ExportHelper):
 	filter_glob = StringProperty(
 			default='*.joe',
 			options={'HIDDEN'})
-	
+
 	def __init__(self):
 		try:
 			self.object = bpy.context.selected_objects[0]
 		except:
 			self.object = None
-	
+
 	def execute(self, context):
 		props = self.properties
 		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
@@ -924,7 +924,7 @@ class export_joe(bpy.types.Operator, ExportHelper):
 			raise NameError('Please select one object!')
 		object = self.object
 		if object.type != 'MESH':
-			raise NameError('Selected object must be a mesh!')	
+			raise NameError('Selected object must be a mesh!')
 		try:
 			file = open(filepath, 'wb')
 			joe = joe_obj().from_mesh(object)
@@ -933,7 +933,7 @@ class export_joe(bpy.types.Operator, ExportHelper):
 		finally:
 			self.report({'INFO'},  object.name + ' exported')
 		return {'FINISHED'}
-		
+
 	def invoke(self, context, event):
 		context.window_manager.fileselect_add(self);
 		return {'RUNNING_MODAL'}
@@ -946,7 +946,7 @@ class import_joe(bpy.types.Operator, ImportHelper):
 	filter_glob = StringProperty(
 		default='*.joe',
 		options={'HIDDEN'})
-	
+
 	def execute(self, context):
 		props = self.properties
 		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
@@ -968,7 +968,7 @@ class import_image(bpy.types.Operator, ImportHelper):
 	filter_glob = StringProperty(
 		default='*.png',
 		options={'HIDDEN'})
-	
+
 	def execute(self, context):
 		props = self.properties
 		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
@@ -1006,13 +1006,13 @@ class export_jpk(bpy.types.Operator, ExportHelper):
 			name='Export objects (objects.jpk)',
 			description='Export track objects as JPK',
 			default=True)
-	
+
 	def execute(self, context):
 		props = self.properties
 		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
 		joe_pack.write(filepath, self.export_list, self.export_jpk)
 		return {'FINISHED'}
-		
+
 	def invoke(self, context, event):
 		context.window_manager.fileselect_add(self);
 		return {'RUNNING_MODAL'}
@@ -1025,7 +1025,7 @@ class import_jpk(bpy.types.Operator, ImportHelper):
 	filter_glob = StringProperty(
 		default='*.jpk',
 		options={'HIDDEN'})
-	
+
 	def execute(self, context):
 		props = self.properties
 		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
@@ -1041,7 +1041,7 @@ class import_joe_list(bpy.types.Operator, ImportHelper):
 	filter_glob = StringProperty(
 		default='*.txt',
 		options={'HIDDEN'})
-	
+
 	def execute(self, context):
 		props = self.properties
 		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
@@ -1049,7 +1049,7 @@ class import_joe_list(bpy.types.Operator, ImportHelper):
 		jpk.to_mesh()
 		return {'FINISHED'}
 
-		
+
 class export_trk(bpy.types.Operator, ExportHelper):
 	bl_idname = 'export.trk'
 	bl_label = 'Export Vdrift roads'
@@ -1057,13 +1057,13 @@ class export_trk(bpy.types.Operator, ExportHelper):
 	filter_glob = StringProperty(
 			default='*.trk',
 			options={'HIDDEN'})
-	
+
 	def execute(self, context):
 		props = self.properties
 		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
 		roads.save(filepath)
 		return {'FINISHED'}
-		
+
 	def invoke(self, context, event):
 		context.window_manager.fileselect_add(self);
 		return {'RUNNING_MODAL'}
@@ -1076,7 +1076,7 @@ class import_trk(bpy.types.Operator, ImportHelper):
 	filter_glob = StringProperty(
 		default='*.trk',
 		options={'HIDDEN'})
-	
+
 	def execute(self, context):
 		props = self.properties
 		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
@@ -1091,13 +1091,13 @@ class export_track(bpy.types.Operator, ExportHelper):
 	filter_glob = StringProperty(
 			default='track.txt',
 			options={'HIDDEN'})
-	
+
 	def execute(self, context):
 		props = self.properties
 		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
 		track.save(filepath)
 		return {'FINISHED'}
-		
+
 	def invoke(self, context, event):
 		context.window_manager.fileselect_add(self);
 		return {'RUNNING_MODAL'}
@@ -1110,11 +1110,85 @@ class import_track(bpy.types.Operator, ImportHelper):
 	filter_glob = StringProperty(
 		default='track.txt',
 		options={'HIDDEN'})
-	
+
 	def execute(self, context):
 		props = self.properties
 		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
 		track.load(filepath)
+		return {'FINISHED'}
+
+def read_vec(str):
+	return tuple(float(i) for i in (str.split('#', 1)[0]).split(','))
+
+def load_suspension(cfg, wheel_name):
+	name = wheel_name+'.double-wishbone'
+	if name in cfg:
+		s = cfg[name]
+		ucf = read_vec(s['upper-chassis-front'])
+		ucr = read_vec(s['upper-chassis-rear'])
+		uh = read_vec(s['upper-hub'])
+		lcf = read_vec(s['lower-chassis-front'])
+		lcr = read_vec(s['lower-chassis-rear'])
+		lh = read_vec(s['lower-hub'])
+		verts = [ucf, uh, ucr, lcf, lh, lcr]
+		edges = [(0,1), (1,2), (2,0), (3,4), (4,5), (5,3), (1,4)]
+	else:
+		name = wheel_name+'.macpherson-strut'
+		if name in cfg:
+			s = cfg[name]
+			e = read_vec(s['strut-end'])
+			t = read_vec(s['strut-top'])
+			h = read_vec(s['hinge'])
+			verts = [h, e, t]
+			edges = [(0,1), (1,2)]
+		else:
+			name = wheel_name+'.hinge'
+			s = cfg[name]
+			hw = read_vec(s['wheel'])
+			hb = read_vec(s['chassis'])
+			verts = [hw, hb]
+			edges = [(0,1)]
+	mesh = bpy.data.meshes.new(name)
+	mesh.from_pydata(verts, edges, [])
+	obj = bpy.data.objects.new(name, mesh)
+	bpy.context.scene.objects.link(obj)
+
+def load_wheel(cfg, wheel_name):
+	tp = read_vec(cfg[wheel_name]['position'])
+	ts = read_vec(cfg[wheel_name+'.tire']['size'])
+	tw = ts[0] * 0.001
+	ta = ts[1] * 0.01
+	tr = ts[2] * 0.5 * 0.0254 + tw * ta
+	bpy.ops.mesh.primitive_cylinder_add(vertices=16, radius=tr, depth=tw, location=tp, rotation=(0.0, 1.5708, 0.0))
+	load_suspension(cfg, wheel_name)
+
+class import_car(bpy.types.Operator, ImportHelper):
+	bl_idname = 'import.car'
+	bl_label = 'Import VDrift car'
+	filename_ext = '.car'
+	filter_glob = StringProperty(
+		default='*.car',
+		options={'HIDDEN'})
+
+	def execute(self, context):
+		props = self.properties
+		filepath = bpy.path.ensure_ext(self.filepath, self.filename_ext)
+		try:
+			from configparser import ConfigParser
+			cfg = ConfigParser()
+			cfg.read(filepath)
+			load_wheel(cfg, 'wheel.fl')
+			load_wheel(cfg, 'wheel.fr')
+			load_wheel(cfg, 'wheel.rl')
+			load_wheel(cfg, 'wheel.rr')
+
+			filepath = path.join(path.dirname(filepath), 'body.joe')
+			file = open(filepath, 'rb')
+			joe = joe_obj().load(file)
+			joe.to_mesh(bpy.path.basename(filepath), None)
+			file.close()
+		finally:
+			self.report({'INFO'},  filepath + ' imported')
 		return {'FINISHED'}
 
 
@@ -1158,6 +1232,10 @@ def menu_import_track(self, context):
 	self.layout.operator(import_track.bl_idname, text = 'VDrift Track Info (track.txt)')
 
 
+def menu_import_car(self, context):
+	self.layout.operator(import_car.bl_idname, text = 'VDrift Car (.car)')
+
+
 def register():
 	bpy.utils.register_module(__name__)
 	bpy.types.INFO_MT_file_export.append(menu_export_joe)
@@ -1170,6 +1248,7 @@ def register():
 	bpy.types.INFO_MT_file_export.append(menu_export_track)
 	bpy.types.INFO_MT_file_import.append(menu_import_track)
 	bpy.types.INFO_MT_file_import.append(menu_import_joe_list)
+	bpy.types.INFO_MT_file_import.append(menu_import_car)
 
 def unregister():
 	bpy.utils.unregister_module(__name__)
@@ -1183,6 +1262,7 @@ def unregister():
 	bpy.types.INFO_MT_file_export.remove(menu_export_track)
 	bpy.types.INFO_MT_file_import.remove(menu_import_track)
 	bpy.types.INFO_MT_file_import.append(menu_import_joe_list)
+	bpy.types.INFO_MT_file_import.append(menu_import_car)
 
 if __name__ == '__main__':
 	register()
