@@ -386,7 +386,9 @@ class joe_pack:
 				continue
 			nodes = mat.node_tree.nodes
 			bsdf = nodes.get('Principled BSDF')
-			image = bsdf.inputs['Base Color'].links[0].from_node.image
+			bcol = bsdf.inputs['Base Color']
+			if bcol.is_linked:
+				image = bcol.links[0].from_node.image
 			if not image:
 				print(obj.name + ' not exported. No texture linked.')
 				continue
