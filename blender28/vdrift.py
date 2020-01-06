@@ -364,7 +364,7 @@ class joe_pack:
 				print(name + ' not imported. Not in list.txt.')
 
 	def from_mesh(self):
-		objlist = bpy.context.scene.collection.objects
+		objlist = bpy.context.scene.collection.all_objects
 		trackobject.set_groups()
 		for obj in objlist:
 			if obj.type != 'MESH':
