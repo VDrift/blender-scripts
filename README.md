@@ -1,8 +1,6 @@
 VDrift Blender Scripts
 ======================
 
-TODO
-
 Installing
 ----------
 
@@ -11,6 +9,11 @@ Installing
 - Go to File/User preferences/Add-Ons/Import-Export
 - enable Import-Export: VDrift JOE/JPK format
 
+Usage
+-----
+
+The exporter expects each mesh to have a single material with a texture as shader base color input.
+If you have meshes with multiple materials. Select (all of) them. Switch into Edit Mode. Go to Mesh -> Separate -> By Material.
 
 See also
 --------
