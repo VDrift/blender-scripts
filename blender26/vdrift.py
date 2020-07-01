@@ -342,6 +342,9 @@ class joe_pack:
 		jpk.load_list(filename)
 		jpk.load_images(filename)
 		try:
+			if not filename.endswith('.jpk'):
+				dir = path.dirname(filename)
+				filename = path.join(dir, 'objects.jpk')
 			jpk.load(filename)
 		except:
 			jpk.load_joes(filename)
